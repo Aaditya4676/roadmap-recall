@@ -22,27 +22,27 @@ export function RoadmapBrowser({ sections }: { sections: CatalogSection[] }) {
       <div className="card mb-6 grid gap-3 p-4 sm:grid-cols-[1fr_auto_auto]">
         <label className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted)]" size={18} />
-          <span className="sr-only">Search roadmap</span>
-          <input className="field !pl-10" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search 795 topics…" />
+          <span className="sr-only">Search learning plan</span>
+          <input className="field !pl-10" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search topics…" />
         </label>
         <label className="relative">
           <Filter className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted)]" size={16} />
           <select className="field !pl-9" value={part} onChange={(e) => setPart(e.target.value as typeof part)}>
-            <option value="all">Both tracks</option>
-            <option value="frontend">Frontend priority</option>
-            <option value="fullstack">Full-stack extension</option>
+            <option value="all">All parts</option>
+            <option value="frontend">Primary plan</option>
+            <option value="fullstack">Extension plan</option>
           </select>
         </label>
         <label className="flex min-h-11 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-sm font-semibold">
           <input type="checkbox" checked={onlyActive} onChange={(e) => setOnlyActive(e.target.checked)} /> Active only
         </label>
       </div>
-      {!sections.length && <div className="card p-8 text-center"><h2 className="text-xl font-bold">Catalog not imported yet</h2><p className="mt-2 text-[var(--muted)]">Run <code>npm run roadmap:import</code> after connecting Supabase. Preview first to verify the 795-item gate.</p></div>}
+      {!sections.length && <div className="card p-8 text-center"><h2 className="text-xl font-bold">Your library is empty</h2><p className="mt-2 text-[var(--muted)]">Add a topic manually or import your learning plan when you are ready.</p></div>}
       {filtered.map((section) => (
         <details className="card group mb-4 overflow-hidden" key={section.id} open={Boolean(query)}>
           <summary className="flex cursor-pointer list-none items-center gap-4 p-5">
             <span className="grid size-9 shrink-0 place-items-center rounded-md bg-[var(--accent-soft)] font-bold text-[var(--accent)]">{section.section_number}</span>
-            <span className="min-w-0 flex-1"><span className="block font-bold">{section.title}</span><span className="text-xs text-[var(--muted)]">{section.roadmap_items.length} visible · {section.part === "frontend" ? "Frontend" : "Full-stack extension"}</span></span>
+            <span className="min-w-0 flex-1"><span className="block font-bold">{section.title}</span><span className="text-xs text-[var(--muted)]">{section.roadmap_items.length} visible · {section.part === "frontend" ? "Primary plan" : "Extension plan"}</span></span>
             <ChevronDown className="transition group-open:rotate-180" size={18} />
           </summary>
           <div className="divide-y divide-[var(--border)] border-t border-[var(--border)]">

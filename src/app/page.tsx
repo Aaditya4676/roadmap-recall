@@ -18,7 +18,7 @@ export default function HomePage() {
       <main>
         <section className="mx-auto grid max-w-7xl items-center gap-14 px-5 pb-24 pt-16 sm:px-8 lg:grid-cols-[1.08fr_.92fr] lg:pt-24">
           <div>
-            <p className="context-label mb-4">Frontend-first learning companion</p>
+            <p className="context-label mb-4">Personal learning companion</p>
             <h1 className="text-balance max-w-3xl text-5xl font-bold leading-[1.06] tracking-[-0.045em] sm:text-6xl">
               Remember what you learn, without managing a spreadsheet.
             </h1>
@@ -32,7 +32,7 @@ export default function HomePage() {
             <div className="mt-7 flex flex-wrap gap-x-5 gap-y-2 text-sm text-[var(--muted)]">
               <span className="inline-flex items-center gap-1.5"><Check size={16} className="text-[var(--accent)]" /> No streak pressure</span>
               <span className="inline-flex items-center gap-1.5"><Check size={16} className="text-[var(--accent)]" /> Private by default</span>
-              <span className="inline-flex items-center gap-1.5"><Check size={16} className="text-[var(--accent)]" /> 795-topic roadmap</span>
+              <span className="inline-flex items-center gap-1.5"><Check size={16} className="text-[var(--accent)]" /> Works with any subject</span>
             </div>
           </div>
 
@@ -43,7 +43,7 @@ export default function HomePage() {
                 <span className="rounded-md border border-[var(--border)] px-2.5 py-1 text-sm font-semibold text-[var(--muted)]">~6 min</span>
               </div>
               <div className="mt-6 grid gap-3">
-                {["JavaScript closures", "React rendering model", "HTTP caching"].map((topic, index) => (
+                {["Compound interest", "Active recall", "Photosynthesis"].map((topic, index) => (
                   <div key={topic} className="flex items-center gap-3 rounded-lg border border-[var(--border)] p-3.5">
                     <span className="grid size-9 shrink-0 place-items-center rounded-md bg-[var(--subtle)] text-sm font-bold">{index + 1}</span>
                     <div className="min-w-0"><p className="truncate font-semibold">{topic}</p><p className="text-xs text-[var(--muted)]">{index === 0 ? "Due today" : `${index + 1} days overdue`}</p></div>

@@ -22,7 +22,7 @@ export async function PATCH(request: NextRequest) {
     catch { throw new HttpError(400, "Unknown IANA timezone.", "invalid_timezone"); }
 
     if (body.migrateExisting) {
-      const topics = await getTopics(db);
+      const topics = await getTopics(db, user.id);
       const events = await selectAllByOwner(db, "review_events", user.id, "topic_id, reviewed_at, rating");
       const migrations = [];
       for (const topic of topics.filter((item) => item.scheduler !== body.defaultScheduler)) {

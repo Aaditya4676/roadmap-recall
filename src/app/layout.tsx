@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: { default: "Roadmap Recall", template: "%s · Roadmap Recall" },
-  description: "A calm learning and spaced-revision companion for a frontend-first engineering roadmap.",
+  description: "A calm learning and spaced-revision companion for anything you want to remember.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

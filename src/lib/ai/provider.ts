@@ -15,12 +15,12 @@ export interface GenerationContext {
 }
 
 function promptFor(context: GenerationContext, repair?: string): string {
-  return `You create concise learning support for a frontend-first software engineer.
+  return `You create concise learning support for a self-directed learner.
 Do not imitate the user's voice and do not overwrite or rewrite their note. Add a separate explanation.
 Be technically precise, admit uncertainty, and prioritize durable mental models and active recall.
 
 Topic: ${context.title}
-Roadmap location: ${context.breadcrumb}
+Learning plan location: ${context.breadcrumb}
 Kind: ${context.kind}
 ${context.personalMarkdown !== undefined ? `Personal note shared with explicit consent:\n---\n${context.personalMarkdown}\n---` : "No personal note was shared. Work only from the topic metadata."}
 

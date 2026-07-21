@@ -1,6 +1,6 @@
 # Roadmap Recall
 
-A frontend-first learning and spaced-revision companion built around the 795 scoped checklist items in `MASTER_FRONTEND_FULLSTACK_ROADMAP2.md` (613 frontend, 182 full-stack extension).
+A subject-neutral learning and spaced-revision companion. The included importer is currently configured for the 795 scoped checklist items in `MASTER_FRONTEND_FULLSTACK_ROADMAP2.md`, but manual topics, review scheduling, notes, AI support, and progress tracking are domain-independent.
 
 The public `/demo` is a real localStorage sandbox. The private `/app/*` workspace uses Supabase Auth, Postgres, and RLS. Personal notes and optional AI notes are separate data models and separate API capabilities.
 

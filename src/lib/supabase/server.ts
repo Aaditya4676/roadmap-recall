@@ -2,7 +2,9 @@ import "server-only";
 
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { cache } from "react";
 import { env, hasSupabaseConfig } from "@/lib/env";
+import type { ProfileIdentity } from "@/lib/supabase/profile";
 
 export async function createServerSupabase() {
   if (!hasSupabaseConfig()) throw new Error("Supabase is not configured.");
@@ -21,10 +23,14 @@ export async function createServerSupabase() {
   });
 }
 
-export async function getAuthenticatedUser() {
+export const getAuthenticatedUser = cache(async (): Promise<ProfileIdentity | null> => {
   if (!hasSupabaseConfig()) return null;
   const supabase = await createServerSupabase();
-  const { data, error } = await supabase.auth.getUser();
-  if (error) return null;
-  return data.user;
-}
+  const { data, error } = await supabase.auth.getClaims();
+  if (error || !data?.claims.sub) return null;
+  return {
+    id: data.claims.sub,
+    email: data.claims.email,
+    user_metadata: data.claims.user_metadata,
+  };
+});

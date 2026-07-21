@@ -3,6 +3,15 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AiNoteRecord, StudyTopic } from "@/lib/domain/types";
 import { selectAllByOwner } from "@/lib/supabase/pagination";
+import { getAuthenticatedUser } from "@/lib/supabase/server";
+
+export interface TopicSummary {
+  id: string;
+  title: string;
+  breadcrumb: string;
+  dueOn: string;
+  hasVisibleAiNote: boolean;
+}
 
 function mapTopic(row: any): StudyTopic {
   const note = Array.isArray(row.personal_notes) ? row.personal_notes[0] : row.personal_notes;
@@ -49,11 +58,39 @@ function mapTopic(row: any): StudyTopic {
 
 const topicSelection = "*, personal_notes(*), review_states(*), ai_notes(*)";
 
-export async function getTopics(db: SupabaseClient): Promise<StudyTopic[]> {
-  const { data: userData, error: userError } = await db.auth.getUser();
-  if (userError || !userData.user) throw userError ?? new Error("Authentication required.");
-  const data = await selectAllByOwner(db, "study_topics", userData.user.id, topicSelection);
+async function ownerId(explicitOwnerId?: string): Promise<string> {
+  if (explicitOwnerId) return explicitOwnerId;
+  const user = await getAuthenticatedUser();
+  if (!user) throw new Error("Authentication required.");
+  return user.id;
+}
+
+export async function getTopics(db: SupabaseClient, explicitOwnerId?: string): Promise<StudyTopic[]> {
+  const data = await selectAllByOwner(db, "study_topics", await ownerId(explicitOwnerId), topicSelection);
   return data.filter((row) => !row.archived).sort((a, b) => String(b.activated_at).localeCompare(String(a.activated_at))).map(mapTopic);
+}
+
+export async function getTopicSummaries(db: SupabaseClient): Promise<TopicSummary[]> {
+  const data = await selectAllByOwner(
+    db,
+    "study_topics",
+    await ownerId(),
+    "id, title, breadcrumb, archived, activated_at, review_states(due_on), ai_notes(hidden)",
+  );
+  return data
+    .filter((row) => !row.archived)
+    .sort((a, b) => String(b.activated_at).localeCompare(String(a.activated_at)))
+    .map((row) => {
+      const state = Array.isArray(row.review_states) ? row.review_states[0] : row.review_states;
+      const aiNotes = Array.isArray(row.ai_notes) ? row.ai_notes : row.ai_notes ? [row.ai_notes] : [];
+      return {
+        id: row.id,
+        title: row.title,
+        breadcrumb: row.breadcrumb,
+        dueOn: state.due_on,
+        hasVisibleAiNote: aiNotes.some((note: { hidden: boolean }) => !note.hidden),
+      };
+    });
 }
 
 export async function getTopic(db: SupabaseClient, id: string): Promise<StudyTopic | null> {

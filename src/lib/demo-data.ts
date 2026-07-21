@@ -33,9 +33,9 @@ export function createDemoTopics(now = new Date()): StudyTopic[] {
   };
 
   return [
-    make("demo-closures", "JavaScript closures", "5. JavaScript deeply · Functions and scope", "## In my words\n\nA closure is a function bundled with references to its lexical environment. The references remain reachable after the outer function returns.\n\n```js\nfunction counter() {\n  let n = 0;\n  return () => ++n;\n}\n```\n\n**Watch for:** stale closures in React effects.", 0, {
+    make("demo-active-recall", "Active recall", "Learning science · Memory", "## In my words\n\nActive recall means trying to reconstruct an idea before looking at the answer. The effort of retrieval is the useful part, even when my first attempt is incomplete.", 0, {
       aiNote: {
-        id: "ai-closures",
+        id: "ai-active-recall",
         revision: 1,
         sourceNoteRevision: 1,
         provider: "gemini",
@@ -44,24 +44,24 @@ export function createDemoTopics(now = new Date()): StudyTopic[] {
         updatedAt: now.toISOString(),
         hidden: false,
         document: {
-          summary: "Closures preserve access to bindings from the lexical scope where a function was created.",
-          keyPoints: ["They capture bindings, not frozen values.", "They power factories, memoization and data privacy."],
-          mentalModel: "A function carries a live backpack of the outer bindings it still references.",
-          pitfalls: ["Loop-variable capture", "Stale state in callbacks", "Accidental retention of large objects"],
-          recallQuestions: [{ question: "Why does a returned inner function still see outer variables?", answer: "Its lexical environment remains reachable through the closure." }],
-          practiceIdeas: ["Implement once(fn) without mutating the original function."],
-          connections: ["Lexical scope", "React hook dependencies", "Garbage collection"],
+          summary: "Active recall strengthens access to knowledge by requiring retrieval instead of recognition.",
+          keyPoints: ["Attempt an answer before revealing notes.", "Use feedback to correct the retrieved answer, not merely reread it."],
+          mentalModel: "Practice finding the path to an idea, not just recognizing the destination.",
+          pitfalls: ["Revealing the answer too quickly", "Mistaking familiarity for recall", "Reviewing without corrective feedback"],
+          recallQuestions: [{ question: "Why is a difficult retrieval attempt useful?", answer: "The retrieval effort strengthens later access when followed by feedback." }],
+          practiceIdeas: ["Close a source and write three claims you remember before checking it."],
+          connections: ["Spaced repetition", "Testing effect", "Metacognition"],
         },
       },
     }),
-    make("demo-event-loop", "Event loop and microtasks", "5. JavaScript deeply · Runtime behavior", "Promise callbacks run as microtasks after the current stack and before the next task. I should trace output rather than guess.", -2),
-    make("demo-react-render", "React rendering model", "7. React · Rendering and reconciliation", "A render calculates the next UI snapshot. Commit applies changes. State belongs to a position in the tree, not to a JSX tag instance.", 0),
-    make("demo-a11y", "Accessible modal dialogs", "2. HTML and accessibility · Accessibility", "Need initial focus, contained Tab movement, Escape close, labelled dialog, and focus restoration.", 3, { kind: "drill" }),
-    make("demo-css", "Stacking contexts", "3. CSS · Core CSS", "A high z-index cannot escape its stacking context. First identify which properties create new contexts.", 5),
-    make("demo-web-vitals", "Core Web Vitals", "10. Performance · User-centric metrics", "LCP = loading, INP = responsiveness, CLS = visual stability. Diagnose with field data before lab profiling.", 8),
-    make("demo-hooks", "useDebounce with cleanup", "16. Frontend drills · Custom hooks", "Contract: cancel stale timer on dependency change and unmount; work under StrictMode; define leading/trailing behavior.", 1, { kind: "drill" }),
-    make("demo-system-design", "Autocomplete system design", "15. Frontend system design · Search experiences", "Cover debouncing, cancellation, cache, request identity, keyboard UX, accessibility, ranking, errors and observability.", 12, { kind: "project" }),
-    make("demo-http", "HTTP caching", "23. Backend extension · Networking", "Cache-Control controls freshness. Validators allow conditional requests. Shared caches need correct Vary behavior.", 6, { part: "fullstack" }),
-    make("demo-node", "Node.js streams", "24. Backend extension · Node.js", "Streams bound memory and support backpressure; don't buffer an entire large payload when processing incrementally.", 14, { part: "fullstack" }),
+    make("demo-compound-interest", "Compound interest", "Personal finance · Growth", "Interest is added to the principal, so later interest is earned on both the original amount and prior interest. The growth is exponential when the rate stays constant.", -2),
+    make("demo-photosynthesis", "Photosynthesis", "Biology · Energy", "Plants use light energy to turn carbon dioxide and water into glucose and oxygen. Light-dependent reactions capture energy; the Calvin cycle uses it to fix carbon.", 0),
+    make("demo-probability", "Bayes’ theorem", "Mathematics · Probability", "Update a prior belief using how likely the evidence is under each competing explanation. I should calculate with concrete frequencies when percentages feel abstract.", 3, { kind: "drill" }),
+    make("demo-argument", "Building a clear argument", "Writing · Structure", "State the claim, give relevant evidence, explain why the evidence supports it, and address the strongest reasonable counterargument.", 5),
+    make("demo-spanish", "Ser and estar", "Languages · Spanish", "Both translate to “to be,” but ser usually describes identity or defining traits while estar describes state or location. Context matters more than a permanent-versus-temporary shortcut.", 8),
+    make("demo-feynman", "Feynman explanation drill", "Practice · Explanation", "Explain the idea in plain language, notice where the explanation becomes vague, return to the source, and simplify again without losing accuracy.", 1, { kind: "drill" }),
+    make("demo-source-check", "Evaluating a source", "Research · Evidence", "Check who produced it, what claim it actually supports, how the evidence was gathered, whether better primary sources exist, and what incentives may shape it.", 12, { kind: "project" }),
+    make("demo-http", "HTTP caching", "Technology · Web basics", "Cache-Control defines freshness. Validators such as ETag allow a client to ask whether stale content has changed instead of downloading it again.", 6, { part: "fullstack" }),
+    make("demo-speaking", "Opening a presentation", "Communication · Presentations", "Give the audience a reason to care, state the question or outcome, and preview the route. Avoid spending the opening on apologies or background they do not yet need.", 14, { part: "fullstack" }),
   ];
 }

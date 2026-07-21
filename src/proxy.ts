@@ -17,7 +17,9 @@ export async function proxy(request: NextRequest) {
       },
     },
   });
-  await supabase.auth.getUser();
+  // Verifies the JWT and refreshes it when needed. With asymmetric signing
+  // keys this avoids an Auth API round trip on every in-app navigation.
+  await supabase.auth.getClaims();
   return response;
 }
 
