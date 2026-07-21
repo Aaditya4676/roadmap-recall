@@ -8,7 +8,7 @@ import { dateKey } from "@/lib/date";
 import { env } from "@/lib/env";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 
-export const maxDuration = 120;
+export const maxDuration = 60;
 
 export async function GET(request: NextRequest) {
   try {

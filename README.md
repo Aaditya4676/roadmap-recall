@@ -36,9 +36,9 @@ For the private workspace:
 1. Create a Supabase project.
 2. Copy `.env.example` to `.env.local` and fill the public Supabase URL/key, service-role key, `OWNER_EMAIL`, and `APP_URL`.
 3. Apply every SQL file in `supabase/migrations` in numeric order (or use the Supabase CLI).
-4. In Supabase Auth, disable open public signup, use the owner email only, set the Site URL/redirect URL, and configure Resend as custom SMTP. Supabase’s demo SMTP is not suitable for this app.
-5. Sign in once so the profile trigger creates the owner profile.
-6. Preview and apply the roadmap:
+4. In Supabase Auth, create and confirm exactly one user with the same address as `OWNER_EMAIL`, then disable open public signup.
+5. Set the Auth Site URL/redirect URL and configure Resend as custom SMTP. Supabase’s demo SMTP is not suitable for this app.
+6. Sign in once with that owner email, then preview and apply the roadmap:
 
 ```powershell
 npm run roadmap:preview
