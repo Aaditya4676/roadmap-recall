@@ -57,3 +57,25 @@ test("migrates an existing v1 demo without losing local topics", async ({ page }
     legacyRemoved: localStorage.getItem("roadmap-recall-demo-v1") === null,
   }))).toEqual({ migrated: true, legacyRemoved: true });
 });
+
+test("activity keeps gaps truthful while showing later recovery", async ({ page }) => {
+  await page.goto("/demo");
+  await page.getByRole("link", { name: "Activity" }).click();
+  await expect(page.getByRole("heading", { name: "Activity", exact: true })).toBeVisible();
+  await expect(page.getByText(/of the last 7 days/i)).toBeVisible();
+
+  const recoveredDay = page.getByRole("button", { name: /completed later/i }).first();
+  await recoveredDay.click();
+  await expect(page.getByText(/completed later/i).last()).toBeVisible();
+
+  const calendar = page.getByRole("group", { name: /Learning activity calendar/i });
+  const firstVisibleDay = calendar.getByRole("button").first();
+  await firstVisibleDay.focus();
+  await page.keyboard.press("ArrowLeft");
+  await expect(firstVisibleDay).toBeFocused();
+  await page.keyboard.press("ArrowRight");
+  await expect(calendar.getByRole("button").nth(7)).toBeFocused();
+
+  const results = await new AxeBuilder({ page }).analyze();
+  expect(results.violations).toEqual([]);
+});

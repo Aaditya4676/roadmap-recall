@@ -13,6 +13,7 @@ The public `/demo` is a real localStorage sandbox. The private `/app/*` workspac
 - Fast learning capture, Markdown notes, local draft recovery, monotonic revisions, and conflict responses.
 - FSRS (90% desired retention, one-year cap) and a transparent fixed 1d → 7d → 30d → maintenance scheduler.
 - Active-recall review flow with hidden notes, scratchpad, optional append, separate AI reveal, and rating.
+- A forgiving Activity calendar with rolling 7/30-day rhythm, stronger due-review days, and truthful recovery marks for overdue reviews completed later.
 - Explicit replay-based scheduler migration with an audit event.
 - Optional Gemini and Z.AI generation with structured output, one schema-repair retry, visible provider errors, and no silent fallback.
 - Custom GPT Action boundary with metadata queue, consent-aware paginated context, revisioned AI-note upserts, transactional batches of up to three, timing-safe credentials, DB rate limits, and audit records.

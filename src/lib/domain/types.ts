@@ -81,6 +81,7 @@ export interface ReviewEvent {
   id: string;
   topicId: string;
   reviewedAt: string;
+  reviewedOn: string;
   rating: ReviewRating;
   scheduler: SchedulerKind;
   previousDueOn: string;

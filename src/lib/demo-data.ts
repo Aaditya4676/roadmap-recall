@@ -1,4 +1,5 @@
 import { addCalendarDays, dateKey, zonedNoonTimestamp } from "@/lib/date";
+import type { ActivityEvent } from "@/lib/activity";
 import type { StudyTopic } from "@/lib/domain/types";
 import { createReviewState } from "@/lib/scheduler";
 
@@ -64,4 +65,41 @@ export function createDemoTopics(now = new Date()): StudyTopic[] {
     make("demo-http", "HTTP caching", "Technology · Web basics", "Cache-Control defines freshness. Validators such as ETag allow a client to ask whether stale content has changed instead of downloading it again.", 6, { part: "fullstack" }),
     make("demo-speaking", "Opening a presentation", "Communication · Presentations", "Give the audience a reason to care, state the question or outcome, and preview the route. Avoid spending the opening on apologies or background they do not yet need.", 14, { part: "fullstack" }),
   ];
+}
+
+export function createDemoActivityEvents(topics: StudyTopic[], today: string): ActivityEvent[] {
+  const events: ActivityEvent[] = topics.map((topic) => ({
+    kind: "learned",
+    topicId: topic.id,
+    eventOn: topic.learnedOn,
+    previousDueOn: null,
+  }));
+
+  // A small deterministic history makes Activity useful before a demo visitor
+  // has completed local reviews. It never leaves the browser.
+  const sampleOffsets = [-46, -39, -32, -25, -19, -14, -10, -8, -6, -3, -1];
+  sampleOffsets.forEach((offset, index) => {
+    const topic = topics[index % Math.max(topics.length, 1)];
+    if (!topic || !topic.id.startsWith("demo-")) return;
+    const eventOn = addCalendarDays(today, offset);
+    const lateBy = index === 4 ? 1 : index === 7 ? 5 : 0;
+    events.push({
+      kind: "reviewed",
+      topicId: topic.id,
+      eventOn,
+      previousDueOn: addCalendarDays(eventOn, -lateBy),
+    });
+  });
+
+  for (const topic of topics) {
+    if (!topic.reviewState.lastReviewedAt) continue;
+    const eventOn = dateKey(topic.reviewState.lastReviewedAt);
+    events.push({
+      kind: "reviewed",
+      topicId: topic.id,
+      eventOn,
+      previousDueOn: eventOn,
+    });
+  }
+  return events;
 }

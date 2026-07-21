@@ -16,9 +16,11 @@ import {
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
+import { ActivityView } from "@/components/activity-view";
 import { Markdown } from "@/components/markdown";
 import { PageHeading } from "@/components/page-heading";
-import { createDemoTopics } from "@/lib/demo-data";
+import { activityCalendarRange, buildActivitySummary } from "@/lib/activity";
+import { createDemoActivityEvents, createDemoTopics } from "@/lib/demo-data";
 import { dateKey, humanDate, isDue, isOverdue } from "@/lib/date";
 import type { ReviewRating, StudyTopic } from "@/lib/domain/types";
 import { createReviewState, scheduleReview } from "@/lib/scheduler";
@@ -90,16 +92,16 @@ export function DemoApp() {
   }
 
   if (!ready) {
-    return <AppShell demo><div className="card mx-auto max-w-xl p-8 text-center text-[var(--muted)]" role="status">Opening the local sandbox…</div></AppShell>;
+    return <AppShell demo demoView={view}><div className="card mx-auto max-w-xl p-8 text-center text-[var(--muted)]" role="status">Opening the local sandbox…</div></AppShell>;
   }
 
   return (
-    <AppShell demo>
+    <AppShell demo demoView={view}>
       <div className="mb-5 rounded-lg border border-[var(--border)] bg-[var(--accent-soft)] px-4 py-3 text-sm text-[var(--accent)]">
         <strong>Private sandbox:</strong> everything here stays in this browser. It never reads or writes the production database.
       </div>
       {view === "roadmap" ? <DemoRoadmap topics={topics} onSelect={setSelected} onCapture={() => setCaptureOpen(true)} />
-        : view === "progress" ? <DemoProgress topics={topics} />
+        : view === "activity" || view === "progress" ? <DemoActivity topics={topics} />
           : view === "settings" ? <DemoSettings onReset={reset} />
             : <DemoToday topics={topics} onStart={() => setReviewOpen(true)} onSelect={setSelected} onCapture={() => setCaptureOpen(true)} />}
       {captureOpen && <CaptureModal onClose={() => setCaptureOpen(false)} onSave={(topic) => { setTopics((current) => [topic, ...current]); setCaptureOpen(false); }} />}
@@ -155,15 +157,14 @@ function TopicGroup({ label, topics, onSelect }: { label: string; topics: StudyT
   return <section className="card mb-6 overflow-hidden"><div className="border-b border-[var(--border)] p-5"><h2 className="font-bold">{label}</h2><p className="text-xs text-[var(--muted)]">{topics.length} active demo topics</p></div><div className="divide-y divide-[var(--border)]">{topics.map((topic) => <button key={topic.id} onClick={() => onSelect(topic)} className="flex w-full items-center justify-between gap-4 p-4 text-left hover:bg-[var(--subtle)] sm:px-5"><span><span className="block font-semibold">{topic.title}</span><span className="text-xs text-[var(--muted)]">{topic.breadcrumb}</span></span><span className="rounded-md border border-[var(--border)] px-2 py-0.5 text-xs capitalize text-[var(--muted)]">{topic.kind}</span></button>)}</div></section>;
 }
 
-function DemoProgress({ topics }: { topics: StudyTopic[] }) {
-  const reviews = topics.reduce((total, topic) => total + topic.reviewState.reviewCount, 0);
-  const ai = topics.filter((topic) => topic.aiNote).length;
-  return <><PageHeading eyebrow="Progress without pressure" title="Evidence of learning" description="This view values topics captured and recalls completed—not streaks or guilt." /><dl className="grid grid-cols-3 divide-x divide-[var(--border)] border-y border-[var(--border)]"><Metric value={topics.length} label="topics in active study" tone="accent" /><Metric value={reviews} label="reviews completed here" /><Metric value={ai} label="topics with optional AI notes" /></dl><section className="card mt-6 p-6"><h2 className="text-xl font-bold">Learning mix</h2><div className="mt-6 grid gap-5"><ProgressLine label="Primary plan" value={topics.filter((topic) => topic.part === "frontend").length} total={topics.length} /><ProgressLine label="Extension plan" value={topics.filter((topic) => topic.part === "fullstack").length} total={topics.length} /><ProgressLine label="Practice and projects" value={topics.filter((topic) => topic.kind !== "knowledge").length} total={topics.length} /></div></section></>;
-}
-
-function ProgressLine({ label, value, total }: { label: string; value: number; total: number }) {
-  const percentage = Math.round(value / Math.max(total, 1) * 100);
-  return <div><div className="mb-2 flex justify-between text-sm"><span className="font-semibold">{label}</span><span className="text-[var(--muted)]">{value} · {percentage}%</span></div><div className="h-2 overflow-hidden rounded-full bg-[var(--subtle)]"><div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${percentage}%` }} /></div></div>;
+function DemoActivity({ topics }: { topics: StudyTopic[] }) {
+  const today = dateKey(new Date());
+  const range = activityCalendarRange(today);
+  const summary = useMemo(
+    () => buildActivitySummary(createDemoActivityEvents(topics, today), range.start, range.end, today),
+    [range.end, range.start, today, topics],
+  );
+  return <ActivityView summary={summary} today={today} />;
 }
 
 function DemoSettings({ onReset }: { onReset: () => void }) {
