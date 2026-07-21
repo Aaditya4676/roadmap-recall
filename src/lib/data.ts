@@ -2,16 +2,9 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AiNoteRecord, StudyTopic } from "@/lib/domain/types";
+import { mapTopicSummaryRow, type TopicSummary } from "@/lib/domain/topic-summary";
 import { selectAllByOwner } from "@/lib/supabase/pagination";
 import { getAuthenticatedUser } from "@/lib/supabase/server";
-
-export interface TopicSummary {
-  id: string;
-  title: string;
-  breadcrumb: string;
-  dueOn: string;
-  hasVisibleAiNote: boolean;
-}
 
 function mapTopic(row: any): StudyTopic {
   const note = Array.isArray(row.personal_notes) ? row.personal_notes[0] : row.personal_notes;
@@ -80,17 +73,7 @@ export async function getTopicSummaries(db: SupabaseClient): Promise<TopicSummar
   return data
     .filter((row) => !row.archived)
     .sort((a, b) => String(b.activated_at).localeCompare(String(a.activated_at)))
-    .map((row) => {
-      const state = Array.isArray(row.review_states) ? row.review_states[0] : row.review_states;
-      const aiNotes = Array.isArray(row.ai_notes) ? row.ai_notes : row.ai_notes ? [row.ai_notes] : [];
-      return {
-        id: row.id,
-        title: row.title,
-        breadcrumb: row.breadcrumb,
-        dueOn: state.due_on,
-        hasVisibleAiNote: aiNotes.some((note: { hidden: boolean }) => !note.hidden),
-      };
-    });
+    .map(mapTopicSummaryRow);
 }
 
 export async function getTopic(db: SupabaseClient, id: string): Promise<StudyTopic | null> {

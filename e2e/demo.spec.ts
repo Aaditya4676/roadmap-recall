@@ -24,3 +24,36 @@ test("quick capture schedules a local topic without a network write", async ({ p
   await page.goto("/demo?view=roadmap");
   await expect(page.getByText("AbortController ownership")).toBeVisible();
 });
+
+test("migrates an existing v1 demo without losing local topics", async ({ page }) => {
+  const legacyTopic = {
+    id: "local-legacy-topic",
+    title: "My saved legacy topic",
+    breadcrumb: "Personal topics",
+    kind: "knowledge",
+    part: "frontend",
+    learnedOn: "2026-07-20",
+    activatedAt: "2026-07-20T05:00:00.000Z",
+    scheduler: "fixed",
+    keepWarmDays: 30,
+    note: { markdown: "Still here", revision: 1, updatedAt: "2026-07-20T05:00:00.000Z" },
+    reviewState: {
+      scheduler: "fixed",
+      dueAt: "2099-01-01T06:30:00.000Z",
+      dueOn: "2099-01-01",
+      lastReviewedAt: null,
+      reviewCount: 0,
+      fixedStage: 0,
+      fsrsCard: null,
+    },
+  };
+  await page.addInitScript((topic) => {
+    localStorage.setItem("roadmap-recall-demo-v1", JSON.stringify([topic]));
+  }, legacyTopic);
+  await page.goto("/demo?view=roadmap");
+  await expect(page.getByText("My saved legacy topic")).toBeVisible();
+  expect(await page.evaluate(() => ({
+    migrated: Boolean(localStorage.getItem("roadmap-recall-demo-v2")),
+    legacyRemoved: localStorage.getItem("roadmap-recall-demo-v1") === null,
+  }))).toEqual({ migrated: true, legacyRemoved: true });
+});

@@ -17,8 +17,9 @@ export async function GET(request: NextRequest) {
     const zip = new JSZip();
     zip.file("README.md", `# Roadmap Recall export\n\nExported ${new Date().toISOString()}. Personal notes and AI notes are labelled separately.\n`);
     for (const topic of topics) {
-      const folder = topic.part === "frontend" ? "primary-plan" : "extension-plan";
-      zip.file(`${folder}/${safeName(topic.title)}--${topic.id.slice(0, 8)}.md`, `# ${topic.title}\n\n- Learning plan: ${topic.breadcrumb}\n- Learned: ${topic.learnedOn}\n- Next review: ${topic.reviewState.dueOn}\n- Scheduler: ${topic.scheduler}\n\n## My notes\n\n${topic.note.markdown || "_No personal note._"}${aiMarkdown(topic)}\n`);
+      // Preserve the v1 export layout for existing restore scripts and archives.
+      const folder = topic.part === "frontend" ? "frontend" : "fullstack-extension";
+      zip.file(`${folder}/${safeName(topic.title)}--${topic.id.slice(0, 8)}.md`, `# ${topic.title}\n\n- Roadmap: ${topic.breadcrumb}\n- Learned: ${topic.learnedOn}\n- Next review: ${topic.reviewState.dueOn}\n- Scheduler: ${topic.scheduler}\n\n## My notes\n\n${topic.note.markdown || "_No personal note._"}${aiMarkdown(topic)}\n`);
     }
     const content = await zip.generateAsync({ type: "uint8array", compression: "DEFLATE", compressionOptions: { level: 9 } });
     return new Response(content as BodyInit, { headers: { "content-type": "application/zip", "content-disposition": `attachment; filename="roadmap-recall-markdown-${new Date().toISOString().slice(0, 10)}.zip"`, "cache-control": "private, no-store" } });

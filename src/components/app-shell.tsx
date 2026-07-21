@@ -15,7 +15,7 @@ const navigation = [
 
 function NavContent({ icon: Icon, label, mobile = false }: { icon: LucideIcon; label: string; mobile?: boolean }) {
   const { pending } = useLinkStatus();
-  return <>{pending ? <LoaderCircle className="animate-spin" size={mobile ? 18 : 19} aria-hidden /> : <Icon size={mobile ? 18 : 19} aria-hidden />}{mobile ? <span>{label}</span> : label}<span className="sr-only" aria-live="polite">{pending ? "Loading" : ""}</span></>;
+  return <>{pending ? <LoaderCircle className="animate-spin" size={mobile ? 18 : 19} aria-hidden /> : <Icon size={mobile ? 18 : 19} aria-hidden />}{mobile ? <span>{label}</span> : label}</>;
 }
 
 export function AppShell({ children, demo = false }: { children: React.ReactNode; demo?: boolean }) {

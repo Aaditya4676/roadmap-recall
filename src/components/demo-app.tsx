@@ -24,6 +24,7 @@ import type { ReviewRating, StudyTopic } from "@/lib/domain/types";
 import { createReviewState, scheduleReview } from "@/lib/scheduler";
 
 const STORAGE_KEY = "roadmap-recall-demo-v2";
+const LEGACY_STORAGE_KEY = "roadmap-recall-demo-v1";
 
 function longDate(day: string): string {
   const [year, month, date] = day.split("-").map(Number);
@@ -66,7 +67,15 @@ export function DemoApp() {
     queueMicrotask(() => {
       try {
         const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored) setTopics(JSON.parse(stored));
+        const legacy = stored ? null : localStorage.getItem(LEGACY_STORAGE_KEY);
+        const saved = stored ?? legacy;
+        if (saved) {
+          setTopics(JSON.parse(saved));
+          if (legacy) {
+            localStorage.setItem(STORAGE_KEY, legacy);
+            localStorage.removeItem(LEGACY_STORAGE_KEY);
+          }
+        }
       } catch { /* a corrupt demo is recoverable from Settings */ }
       setReady(true);
     });

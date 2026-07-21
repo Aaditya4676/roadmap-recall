@@ -2,6 +2,8 @@
 
 A subject-neutral learning and spaced-revision companion. The included importer is currently configured for the 795 scoped checklist items in `MASTER_FRONTEND_FULLSTACK_ROADMAP2.md`, but manual topics, review scheduling, notes, AI support, and progress tracking are domain-independent.
 
+The database retains the original `frontend` / `fullstack` part values as a backward-compatible storage contract. The product maps them to the neutral labels **Primary plan** / **Extension plan**; existing imports and backups therefore require no destructive migration.
+
 The public `/demo` is a real localStorage sandbox. The private `/app/*` workspace uses Supabase Auth, Postgres, and RLS. Personal notes and optional AI notes are separate data models and separate API capabilities.
 
 ## What is implemented

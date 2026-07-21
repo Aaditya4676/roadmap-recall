@@ -28,6 +28,9 @@ export async function requireOwnerRequest(request: NextRequest) {
   }
 
   const db = await createServerSupabase();
+  // Mutation routes deliberately fetch the current Auth user so revoked or
+  // changed accounts are observed immediately. Page navigation uses the
+  // faster, cryptographically verified JWT claims path instead.
   const { data, error } = await db.auth.getUser();
   if (error || !data.user) throw new HttpError(401, "Sign in required.", "unauthorized");
   if (env.OWNER_EMAIL && data.user.email?.toLowerCase() !== env.OWNER_EMAIL.toLowerCase()) {

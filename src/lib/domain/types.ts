@@ -1,5 +1,7 @@
 import type { Card } from "ts-fsrs";
 
+// Stable database/import values retained for backward compatibility. Product
+// UI maps these to the subject-neutral "Primary plan" and "Extension plan".
 export type RoadmapPart = "frontend" | "fullstack";
 export type TopicKind = "knowledge" | "drill" | "project" | "gate" | "routine";
 export type SchedulerKind = "fsrs" | "fixed";
