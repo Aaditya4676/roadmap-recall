@@ -17,14 +17,14 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
   return (
     <div className="mx-auto max-w-4xl">
       <Link href="/app/today" className="button-ghost mb-5 !px-0">← Back</Link>
-      <div className="mb-8">
+      <div className="page-heading mb-8">
         <p className="context-label">{topic.part === "frontend" ? "Primary plan" : "Extension plan"}</p>
         <h1 className="mt-2 text-balance text-3xl font-bold tracking-[-0.035em] sm:text-4xl">{topic.title}</h1>
         <p className="mt-2 text-[var(--muted)]">{topic.breadcrumb}</p>
         <div className="mt-4 flex flex-wrap gap-2 text-xs text-[var(--muted)]">
-          <span className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] px-2.5 py-1"><CalendarClock size={14} /> Due {humanDate(topic.reviewState.dueOn)}</span>
-          <span className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] px-2.5 py-1 capitalize"><Layers3 size={14} /> {topic.scheduler} scheduler</span>
-          <span className="rounded-md border border-[var(--border)] px-2.5 py-1 capitalize">{topic.kind}</span>
+          <span className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[color:var(--surface)]/60 px-2.5 py-1"><CalendarClock size={14} /> Due {humanDate(topic.reviewState.dueOn)}</span>
+          <span className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[color:var(--surface)]/60 px-2.5 py-1 capitalize"><Layers3 size={14} /> {topic.scheduler} scheduler</span>
+          <span className="rounded-md border border-[var(--border)] bg-[color:var(--surface)]/60 px-2.5 py-1 capitalize">{topic.kind}</span>
         </div>
       </div>
       <NoteEditor topicId={topic.id} initialMarkdown={topic.note.markdown} initialRevision={topic.note.revision} />

@@ -59,8 +59,7 @@ test("migrates an existing v1 demo without losing local topics", async ({ page }
 });
 
 test("activity keeps gaps truthful while showing later recovery", async ({ page }) => {
-  await page.goto("/demo");
-  await page.getByRole("link", { name: "Activity" }).click();
+  await page.goto("/demo?view=activity");
   await expect(page.getByRole("heading", { name: "Activity", exact: true })).toBeVisible();
   await expect(page.getByText(/of the last 7 days/i)).toBeVisible();
 

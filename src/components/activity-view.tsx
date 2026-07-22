@@ -146,13 +146,13 @@ export function ActivityView({ summary, today }: { summary: ActivitySummary; tod
 
   return (
     <>
-      <header className="mb-7 max-w-2xl">
+      <header className="page-heading mb-8 max-w-none">
         <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Activity</h1>
         <p className="mt-2 text-[var(--muted)]">A record of returning to what you learn, without a streak that resets.</p>
       </header>
 
-      <section className="card overflow-hidden" aria-labelledby="rhythm-heading">
-        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--border)] px-5 py-4 sm:px-6">
+      <section className="liquid-panel overflow-hidden rounded-[12px]" data-liquid aria-labelledby="rhythm-heading">
+        <div className="glass-divider flex flex-wrap items-start justify-between gap-3 border-b px-5 py-4 sm:px-6">
           <div>
             <h2 id="rhythm-heading" className="text-lg font-bold">Learning rhythm</h2>
             <p className="mt-0.5 text-sm text-[var(--muted)]">This view shows 13 weeks when space is limited and one year on wide screens.</p>
@@ -177,7 +177,7 @@ export function ActivityView({ summary, today }: { summary: ActivitySummary; tod
         </div>
       </section>
 
-      <dl className="mt-6 grid grid-cols-3 divide-x divide-[var(--border)] border-y border-[var(--border)]">
+      <dl className="metric-strip mt-6 grid grid-cols-3 divide-x divide-[var(--border)] border-y">
         <Metric value={`${summary.learningDays7} / 7`} label="recent rhythm" />
         <Metric value={summary.learningDays30} label="learning days · last 30" />
         <Metric value={summary.reviews30} label="reviews · last 30" />
