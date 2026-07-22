@@ -14,11 +14,12 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
   const db = await createServerSupabase();
   const topic = await getTopic(db, id);
   if (!topic) notFound();
+  const isPersonal = topic.breadcrumb === "Personal topics";
   return (
     <div className="mx-auto max-w-4xl">
-      <Link href="/app/today" className="button-ghost mb-5 !px-0">← Back</Link>
+      <Link href="/app/library" className="button-ghost mb-5 !px-0">← Back to Library</Link>
       <div className="page-heading mb-8">
-        <p className="context-label">{topic.part === "frontend" ? "Primary plan" : "Extension plan"}</p>
+        <p className="context-label">{isPersonal ? "Personal topic" : topic.part === "frontend" ? "Primary plan" : "Extension plan"}</p>
         <h1 className="mt-2 text-balance text-3xl font-bold tracking-[-0.035em] sm:text-4xl">{topic.title}</h1>
         <p className="mt-2 text-[var(--muted)]">{topic.breadcrumb}</p>
         <div className="mt-4 flex flex-wrap gap-2 text-xs text-[var(--muted)]">

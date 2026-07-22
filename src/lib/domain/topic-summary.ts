@@ -6,6 +6,15 @@ export interface TopicSummary {
   hasVisibleAiNote: boolean;
 }
 
+export interface LibraryTopicSummary extends TopicSummary {
+  kind: "knowledge" | "drill" | "project" | "gate" | "routine";
+  learnedOn: string;
+  activatedAt: string;
+  scheduler: "fsrs" | "fixed";
+  reviewCount: number;
+  source: "personal" | "plan";
+}
+
 function relationRows<T>(value: T | T[] | null | undefined): T[] {
   if (Array.isArray(value)) return value;
   return value ? [value] : [];
@@ -23,5 +32,19 @@ export function mapTopicSummaryRow(row: any): TopicSummary {
     breadcrumb: String(row.breadcrumb),
     dueOn: state.due_on,
     hasVisibleAiNote: aiNotes.some((note) => note.hidden === false),
+  };
+}
+
+export function mapLibraryTopicSummaryRow(row: any): LibraryTopicSummary {
+  const summary = mapTopicSummaryRow(row);
+  const state = relationRows<{ review_count?: unknown }>(row.review_states)[0];
+  return {
+    ...summary,
+    kind: row.kind,
+    learnedOn: String(row.learned_on),
+    activatedAt: String(row.activated_at),
+    scheduler: row.scheduler,
+    reviewCount: Number(state?.review_count ?? 0),
+    source: row.roadmap_item_id ? "plan" : "personal",
   };
 }

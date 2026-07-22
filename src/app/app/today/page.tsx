@@ -1,4 +1,4 @@
-import { Brain, CheckCircle2, Clock3, Sparkles } from "lucide-react";
+import { Brain, CheckCircle2, ChevronDown, Clock3, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { CaptureTopic } from "@/components/capture-topic";
 import { PageHeading } from "@/components/page-heading";
@@ -66,14 +66,14 @@ export default async function TodayPage() {
       </section>
 
       <details className="content-surface mt-6 group">
-        <summary className="cursor-pointer list-none p-5 font-bold sm:p-6">Next seven topics</summary>
-        <div className="border-t border-[var(--border)] p-5">
+        <summary className="flex cursor-pointer list-none items-center justify-between p-5 font-bold sm:p-6">Coming up <ChevronDown className="transition group-open:rotate-180" size={18} /></summary>
+        <div className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
           {upcoming.length ? upcoming.map((topic) => (
-            <div key={topic.id} className="flex justify-between gap-4 py-2 text-sm">
-              <span>{topic.title}</span>
+            <Link key={topic.id} href={`/app/topics/${topic.id}`} className="flex justify-between gap-4 px-5 py-3 text-sm transition-colors hover:bg-[color:var(--subtle)]/65">
+              <span className="font-medium">{topic.title}</span>
               <span className="shrink-0 text-[var(--muted)]">{humanDate(topic.dueOn)}</span>
-            </div>
-          )) : <p className="text-sm text-[var(--muted)]">No upcoming topics yet.</p>}
+            </Link>
+          )) : <p className="p-5 text-sm text-[var(--muted)]">No upcoming topics yet.</p>}
         </div>
       </details>
     </>

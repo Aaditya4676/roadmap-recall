@@ -37,7 +37,7 @@ export function RoadmapBrowser({ sections }: { sections: CatalogSection[] }) {
           <input type="checkbox" checked={onlyActive} onChange={(e) => setOnlyActive(e.target.checked)} /> Active only
         </label>
       </div>
-      {!sections.length && <div className="content-surface p-8 text-center"><h2 className="text-xl font-bold">Your library is empty</h2><p className="mt-2 text-[var(--muted)]">Add a topic manually or import your learning plan when you are ready.</p></div>}
+      {!sections.length && <div className="content-surface p-8 text-center"><h2 className="text-xl font-bold">Your plan is empty</h2><p className="mt-2 text-[var(--muted)]">Import a learning plan when you are ready. Personal topics still belong in Library.</p></div>}
       {filtered.map((section) => (
         <details className="content-surface group mb-4 overflow-hidden" key={section.id} open={Boolean(query)}>
           <summary className="flex cursor-pointer list-none items-center gap-4 p-5">

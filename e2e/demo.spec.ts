@@ -21,8 +21,12 @@ test("quick capture schedules a local topic without a network write", async ({ p
   await page.getByRole("textbox", { name: "Topic", exact: true }).fill("AbortController ownership");
   await page.getByRole("textbox", { name: /My notes/ }).fill("The creator owns cancellation and passes the signal downstream.");
   await page.getByRole("button", { name: /Save and schedule/i }).click();
-  await page.goto("/demo?view=roadmap");
+  await page.getByRole("button", { name: "Close dialog" }).click();
+  await page.goto("/demo?view=library");
   await expect(page.getByText("AbortController ownership")).toBeVisible();
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await page.goto("/demo?view=plan");
+  await expect(page.getByText("AbortController ownership")).toHaveCount(0);
 });
 
 test("migrates an existing v1 demo without losing local topics", async ({ page }) => {
@@ -50,7 +54,7 @@ test("migrates an existing v1 demo without losing local topics", async ({ page }
   await page.addInitScript((topic) => {
     localStorage.setItem("roadmap-recall-demo-v1", JSON.stringify([topic]));
   }, legacyTopic);
-  await page.goto("/demo?view=roadmap");
+  await page.goto("/demo?view=library");
   await expect(page.getByText("My saved legacy topic")).toBeVisible();
   expect(await page.evaluate(() => ({
     migrated: Boolean(localStorage.getItem("roadmap-recall-demo-v2")),

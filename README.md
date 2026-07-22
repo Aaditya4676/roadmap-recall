@@ -9,6 +9,7 @@ The public `/demo` is a real localStorage sandbox. The private `/app/*` workspac
 ## What is implemented
 
 - Calm Today queue with owner-calendar due dates, overdue carry-forward, a two-minute estimate, and a collapsed preview.
+- Searchable Library for every saved topic, with personal/plan filters and direct access between reviews; the imported Plan remains a separate catalogue.
 - Roadmap importer for numbered sections 1–27 with stable UUIDs, source hashes, locator/similarity matching, classification, preview gates, and non-destructive reimports.
 - Fast learning capture, Markdown notes, local draft recovery, monotonic revisions, and conflict responses.
 - FSRS (90% desired retention, one-year cap) and a transparent fixed 1d → 7d → 30d → maintenance scheduler.

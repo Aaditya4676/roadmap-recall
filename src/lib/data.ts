@@ -2,7 +2,12 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AiNoteRecord, StudyTopic } from "@/lib/domain/types";
-import { mapTopicSummaryRow, type TopicSummary } from "@/lib/domain/topic-summary";
+import {
+  mapLibraryTopicSummaryRow,
+  mapTopicSummaryRow,
+  type LibraryTopicSummary,
+  type TopicSummary,
+} from "@/lib/domain/topic-summary";
 import { selectAllByOwner } from "@/lib/supabase/pagination";
 import { getAuthenticatedUser } from "@/lib/supabase/server";
 
@@ -74,6 +79,19 @@ export async function getTopicSummaries(db: SupabaseClient): Promise<TopicSummar
     .filter((row) => !row.archived)
     .sort((a, b) => String(b.activated_at).localeCompare(String(a.activated_at)))
     .map(mapTopicSummaryRow);
+}
+
+export async function getLibraryTopicSummaries(db: SupabaseClient): Promise<LibraryTopicSummary[]> {
+  const data = await selectAllByOwner(
+    db,
+    "study_topics",
+    await ownerId(),
+    "id, title, breadcrumb, kind, learned_on, activated_at, scheduler, roadmap_item_id, archived, review_states(due_on, review_count), ai_notes(hidden)",
+  );
+  return data
+    .filter((row) => !row.archived)
+    .sort((a, b) => String(b.activated_at).localeCompare(String(a.activated_at)))
+    .map(mapLibraryTopicSummaryRow);
 }
 
 export async function getTopic(db: SupabaseClient, id: string): Promise<StudyTopic | null> {

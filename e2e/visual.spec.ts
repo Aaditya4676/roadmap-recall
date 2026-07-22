@@ -32,6 +32,12 @@ test.describe("light theme visual regression", () => {
     await expect(page).toHaveScreenshot("activity-light.png", { ...screenshotOptions, fullPage: true });
   });
 
+  test("saved-topic library", async ({ page }) => {
+    await page.goto("/demo?view=library");
+    await expect(page.getByRole("heading", { name: "Library", exact: true })).toBeVisible();
+    await expect(page).toHaveScreenshot("library-light.png", { ...screenshotOptions, fullPage: true });
+  });
+
   test("capture dialog", async ({ page }) => {
     await page.goto("/demo");
     await page.getByRole("button", { name: /Add what I learned/i }).click();
