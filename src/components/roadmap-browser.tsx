@@ -19,7 +19,7 @@ export function RoadmapBrowser({ sections }: { sections: CatalogSection[] }) {
   const filtered = useMemo(() => sections.filter((section) => part === "all" || section.part === part).map((section) => ({ ...section, roadmap_items: section.roadmap_items.filter((item) => (!onlyActive || item.active) && `${item.title} ${section.title}`.toLowerCase().includes(query.toLowerCase())) })).filter((section) => section.roadmap_items.length), [sections, query, part, onlyActive]);
   return (
     <>
-      <div className="card mb-6 grid gap-3 p-4 sm:grid-cols-[1fr_auto_auto]">
+      <div className="liquid-panel mb-6 grid gap-3 rounded-[12px] p-4 sm:grid-cols-[1fr_auto_auto]" data-liquid>
         <label className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted)]" size={18} />
           <span className="sr-only">Search learning plan</span>
@@ -33,15 +33,15 @@ export function RoadmapBrowser({ sections }: { sections: CatalogSection[] }) {
             <option value="fullstack">Extension plan</option>
           </select>
         </label>
-        <label className="flex min-h-11 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-sm font-semibold">
+        <label className="flex min-h-11 items-center gap-2 rounded-lg border border-[var(--border)] bg-[color:var(--surface-strong)]/80 px-3 text-sm font-semibold">
           <input type="checkbox" checked={onlyActive} onChange={(e) => setOnlyActive(e.target.checked)} /> Active only
         </label>
       </div>
-      {!sections.length && <div className="card p-8 text-center"><h2 className="text-xl font-bold">Your library is empty</h2><p className="mt-2 text-[var(--muted)]">Add a topic manually or import your learning plan when you are ready.</p></div>}
+      {!sections.length && <div className="content-surface p-8 text-center"><h2 className="text-xl font-bold">Your library is empty</h2><p className="mt-2 text-[var(--muted)]">Add a topic manually or import your learning plan when you are ready.</p></div>}
       {filtered.map((section) => (
-        <details className="card group mb-4 overflow-hidden" key={section.id} open={Boolean(query)}>
+        <details className="content-surface group mb-4 overflow-hidden" key={section.id} open={Boolean(query)}>
           <summary className="flex cursor-pointer list-none items-center gap-4 p-5">
-            <span className="grid size-9 shrink-0 place-items-center rounded-md bg-[var(--accent-soft)] font-bold text-[var(--accent)]">{section.section_number}</span>
+            <span className="grid size-9 shrink-0 place-items-center rounded-md border border-[var(--border)] bg-[color:var(--accent-soft)]/55 font-bold text-[var(--accent)]">{section.section_number}</span>
             <span className="min-w-0 flex-1"><span className="block font-bold">{section.title}</span><span className="text-xs text-[var(--muted)]">{section.roadmap_items.length} visible · {section.part === "frontend" ? "Primary plan" : "Extension plan"}</span></span>
             <ChevronDown className="transition group-open:rotate-180" size={18} />
           </summary>
