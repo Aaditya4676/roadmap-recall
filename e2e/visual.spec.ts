@@ -45,6 +45,14 @@ test.describe("light theme visual regression", () => {
     await expect(dialog).toBeVisible();
     await expect(dialog).toHaveScreenshot("capture-dialog-light.png", screenshotOptions);
   });
+
+  test("question-led recall prompt", async ({ page }) => {
+    await page.goto("/demo");
+    await page.getByRole("button", { name: /Start review/i }).click();
+    const dialog = page.getByRole("dialog", { name: "Review Active recall" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toHaveScreenshot("structured-recall-light.png", screenshotOptions);
+  });
 });
 
 test.describe("dark theme visual regression", () => {

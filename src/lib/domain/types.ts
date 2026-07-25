@@ -56,8 +56,19 @@ export interface StudyTopic {
   aiNote?: AiNoteRecord;
 }
 
+export interface RecallQuestion {
+  id: string;
+  question: string;
+  idealAnswer: string;
+}
+
+export interface RecallAnswerSnapshot extends RecallQuestion {
+  answer: string;
+}
+
 export interface PersonalNote {
   markdown: string;
+  recallQuestions: RecallQuestion[];
   revision: number;
   updatedAt: string;
 }
@@ -70,6 +81,7 @@ export interface ReviewState {
   reviewCount: number;
   fixedStage: number;
   fsrsCard: SerializedCard | null;
+  latestRecallAnswers: RecallAnswerSnapshot[];
 }
 
 export type SerializedCard = Omit<Card, "due" | "last_review"> & {
@@ -87,6 +99,7 @@ export interface ReviewEvent {
   previousDueOn: string;
   nextDueOn: string;
   scratchpad?: string;
+  recallAnswers: RecallAnswerSnapshot[];
 }
 
 export interface AiNoteDocument {

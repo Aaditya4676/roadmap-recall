@@ -2,13 +2,36 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { errorResponse, HttpError, requireOwnerRequest } from "@/lib/auth";
 import { dateKey } from "@/lib/date";
+import {
+  MAX_RECALL_ANSWER_CHARS,
+  MAX_RECALL_QUESTION_CHARS,
+  MAX_RECALL_QUESTIONS,
+  MAX_RECALL_TOTAL_CHARS,
+} from "@/lib/recall";
 import { createReviewStateFromDay } from "@/lib/scheduler";
+
+const recallQuestionSchema = z.object({
+  id: z.string().uuid(),
+  question: z.string().max(MAX_RECALL_QUESTION_CHARS),
+  idealAnswer: z.string().max(MAX_RECALL_ANSWER_CHARS),
+});
+const recallQuestionsSchema = z.array(recallQuestionSchema).max(MAX_RECALL_QUESTIONS).superRefine((items, context) => {
+  const seen = new Set<string>();
+  items.forEach((item, index) => {
+    if (seen.has(item.id)) context.addIssue({ code: "custom", path: [index, "id"], message: "Recall question IDs must be unique." });
+    seen.add(item.id);
+  });
+  if (items.reduce((total, item) => total + item.question.length + item.idealAnswer.length, 0) > MAX_RECALL_TOTAL_CHARS) {
+    context.addIssue({ code: "custom", message: "Recall questions are too large for one topic." });
+  }
+});
 
 const createSchema = z.object({
   roadmapItemId: z.string().uuid().nullable().optional(),
   title: z.string().trim().min(2).max(240).optional(),
   breadcrumb: z.string().trim().max(500).optional(),
   note: z.string().max(100_000).default(""),
+  recallQuestions: recallQuestionsSchema.default([]),
   learnedOn: z.string().date().optional(),
   scheduler: z.enum(["fsrs", "fixed"]).optional(),
   keepWarmDays: z.union([z.literal(14), z.literal(30), z.literal(60), z.null()]).optional(),
@@ -40,7 +63,7 @@ export async function POST(request: NextRequest) {
     const learnedOn = body.learnedOn ?? dateKey(new Date(), profile.time_zone);
     const activatedAt = new Date();
     const state = createReviewStateFromDay(scheduler, learnedOn, profile.time_zone);
-    const { data: topicId, error } = await db.rpc("activate_study_topic", {
+    const { data: topicId, error } = await db.rpc("activate_study_topic_v2", {
       p_roadmap_item_id: body.roadmapItemId ?? null,
       p_title: title,
       p_breadcrumb: breadcrumb,
@@ -54,11 +77,20 @@ export async function POST(request: NextRequest) {
       p_due_on: state.dueOn,
       p_fsrs_card: state.fsrsCard,
       p_initial_markdown: body.note,
+      p_recall_questions: body.recallQuestions,
     });
     if (error) throw error;
     return Response.json({ id: topicId }, { status: 201 });
   } catch (error) {
-    if (error instanceof z.ZodError) return Response.json({ error: { code: "invalid_body", issues: error.issues } }, { status: 400 });
+    if (error instanceof z.ZodError) {
+      return Response.json({
+        error: {
+          code: "invalid_body",
+          message: error.issues[0]?.message ?? "Check the submitted topic.",
+          issues: error.issues,
+        },
+      }, { status: 400 });
+    }
     return errorResponse(error);
   }
 }

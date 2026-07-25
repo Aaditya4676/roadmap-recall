@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { errorResponse, HttpError, requireOwnerRequest } from "@/lib/auth";
 import { generateAiNote } from "@/lib/ai/provider";
+import { readRecallQuestions, recallQuestionsMarkdown } from "@/lib/recall";
 
 export const maxDuration = 120;
 
@@ -15,18 +16,20 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     dbForFailure = db;
     const { id } = await context.params;
     const body = schema.parse(await request.json());
-    const { data: topic, error } = await db.from("study_topics").select("title, breadcrumb, kind, personal_notes(markdown, revision), ai_notes(revision)").eq("id", id).single();
+    const { data: topic, error } = await db.from("study_topics").select("title, breadcrumb, kind, personal_notes(markdown, recall_questions, revision), ai_notes(revision)").eq("id", id).single();
     if (error || !topic) throw new HttpError(404, "Topic not found.", "not_found");
     const personal = Array.isArray(topic.personal_notes) ? topic.personal_notes[0] : topic.personal_notes;
     const currentAi = Array.isArray(topic.ai_notes) ? topic.ai_notes[0] : topic.ai_notes;
     if (!personal) throw new HttpError(409, "This topic has no personal-note record. Export your data and repair it before generating AI notes.", "missing_personal_note");
-    const requestChars = topic.title.length + topic.breadcrumb.length + (body.includePersonalNotes ? personal.markdown.length : 0);
+    const questionText = recallQuestionsMarkdown(readRecallQuestions(personal.recall_questions));
+    const personalContext = [personal.markdown, questionText].filter(Boolean).join("\n\n");
+    const requestChars = topic.title.length + topic.breadcrumb.length + (body.includePersonalNotes ? personalContext.length : 0);
     const model = body.provider === "gemini" ? process.env.GEMINI_MODEL ?? "gemini-2.5-flash" : process.env.ZAI_MODEL ?? "glm-4.5-flash";
     const { data: attempt, error: attemptError } = await db.from("ai_generation_attempts").insert({ owner_id: user.id, topic_id: id, provider: body.provider, model, status: "started", source_note_revision: personal.revision, request_chars: requestChars }).select("id").single();
     if (attemptError) throw attemptError;
     attemptId = attempt.id;
 
-    const generated = await generateAiNote(body.provider, { title: topic.title, breadcrumb: topic.breadcrumb, kind: topic.kind, personalMarkdown: body.includePersonalNotes ? personal.markdown : undefined });
+    const generated = await generateAiNote(body.provider, { title: topic.title, breadcrumb: topic.breadcrumb, kind: topic.kind, personalMarkdown: body.includePersonalNotes ? personalContext : undefined });
     const { data: saved, error: saveError } = await db.rpc("upsert_ai_note_versioned", { p_owner_id: user.id, p_topic_id: id, p_expected_revision: currentAi?.revision ?? 0, p_document: generated.document, p_source_note_revision: personal.revision, p_provider: body.provider, p_model: generated.model });
     if (saveError?.code === "40001") throw new HttpError(409, "Your personal note or AI note changed while generation was running. Review the newer revision before replacing it.", "revision_conflict");
     if (saveError) throw saveError;

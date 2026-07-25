@@ -28,7 +28,13 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
           <span className="rounded-md border border-[var(--border)] bg-[color:var(--surface)]/60 px-2.5 py-1 capitalize">{topic.kind}</span>
         </div>
       </div>
-      <NoteEditor topicId={topic.id} initialMarkdown={topic.note.markdown} initialRevision={topic.note.revision} />
+      <NoteEditor
+        topicId={topic.id}
+        initialMarkdown={topic.note.markdown}
+        initialQuestions={topic.note.recallQuestions}
+        initialRevision={topic.note.revision}
+        latestRecallAnswers={topic.reviewState.latestRecallAnswers}
+      />
       <AiNotePanel topicId={topic.id} note={topic.aiNote} personalRevision={topic.note.revision} />
     </div>
   );

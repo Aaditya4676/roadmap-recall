@@ -18,9 +18,16 @@ test("landing page leads to an isolated, accessible demo", async ({ page }) => {
 test("quick capture schedules a local topic without a network write", async ({ page }) => {
   await page.goto("/demo");
   await page.getByRole("button", { name: /Add what I learned/i }).click();
+  const capture = page.getByRole("dialog", { name: "Add a learned topic" });
+  expect(await capture.evaluate((element) => element.scrollTop)).toBe(0);
   await page.getByRole("textbox", { name: "Topic", exact: true }).fill("AbortController ownership");
   await page.getByRole("textbox", { name: /My notes/ }).fill("The creator owns cancellation and passes the signal downstream.");
+  await page.getByText(/Add recall questions/).click();
+  await page.getByRole("button", { name: "Paste Q&A" }).click();
+  await page.getByRole("textbox", { name: "Paste Q&A pairs" }).fill("Q: Who should own cancellation?\nA: The creator of the operation should own cancellation.");
+  await page.getByRole("button", { name: "Import pairs" }).click();
   await page.getByRole("button", { name: /Save and schedule/i }).click();
+  await expect(page.getByText("The creator of the operation should own cancellation.")).toBeVisible();
   await page.getByRole("button", { name: "Close dialog" }).click();
   await page.goto("/demo?view=library");
   await expect(page.getByText("AbortController ownership")).toBeVisible();
@@ -81,4 +88,26 @@ test("activity keeps gaps truthful while showing later recovery", async ({ page 
 
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
+});
+
+test("question-led review hides references and keeps the latest answer", async ({ page }) => {
+  await page.goto("/demo");
+  await page.getByRole("button", { name: /Start review/i }).click();
+  const review = page.getByRole("dialog", { name: "Review Active recall" });
+  await expect(review).toBeVisible();
+  await expect(review.getByText(/The effort of reconstructing the idea/i)).toHaveCount(0);
+
+  await review.getByRole("textbox", { name: /Why is attempting retrieval useful/i }).fill("The effort makes the memory path easier to find.");
+  await review.getByRole("textbox", { name: /What should happen before you reveal/i }).fill("Commit to an answer first.");
+  await review.getByRole("button", { name: "Check my answers" }).click();
+  await expect(review.getByText(/The effort of reconstructing the idea/i)).toBeVisible();
+  await review.getByRole("button", { name: "good" }).click();
+  await page.getByRole("button", { name: "Close dialog" }).click();
+
+  await page.goto("/demo?view=library");
+  await page.getByRole("button", { name: /Active recall/i }).click();
+  const topic = page.getByRole("dialog", { name: "Active recall" });
+  await topic.getByText("Show latest recalled answer").first().click();
+  await expect(topic.getByText("The effort makes the memory path easier to find.")).toBeVisible();
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });

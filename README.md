@@ -12,8 +12,9 @@ The public `/demo` is a real localStorage sandbox. The private `/app/*` workspac
 - Searchable Library for every saved topic, with personal/plan filters and direct access between reviews; the imported Plan remains a separate catalogue.
 - Roadmap importer for numbered sections 1–27 with stable UUIDs, source hashes, locator/similarity matching, classification, preview gates, and non-destructive reimports.
 - Fast learning capture, Markdown notes, local draft recovery, monotonic revisions, and conflict responses.
+- First-class recall Q&A: paste `Q:` / `A:` pairs, answer each prompt before reveal, compare with the ideal and previous answer, and keep every attempt as immutable review history while the topic exposes the newest attempt.
 - FSRS (90% desired retention, one-year cap) and a transparent fixed 1d → 7d → 30d → maintenance scheduler.
-- Active-recall review flow with hidden notes, scratchpad, optional append, separate AI reveal, and rating.
+- Active-recall review flow with question-led retrieval when Q&A exists, an open-ended fallback for older notes, hidden references, separate AI reveal, and rating.
 - A forgiving Activity calendar with rolling 7/30-day rhythm, stronger due-review days, and truthful recovery marks for overdue reviews completed later.
 - Explicit replay-based scheduler migration with an audit event.
 - Optional Gemini and Z.AI generation with structured output, one schema-repair retry, visible provider errors, and no silent fallback.
@@ -50,6 +51,8 @@ npm run roadmap:import
 ```
 
 The preview must report exactly 795 / 613 / 182. Apply aborts on ambiguity and never deletes activated study state.
+
+Migration `0007_structured_recall.sql` adds the authored question set, latest-answer state, and immutable per-review answer snapshots. Apply it before deploying a build that contains structured recall.
 
 ## AI configuration
 

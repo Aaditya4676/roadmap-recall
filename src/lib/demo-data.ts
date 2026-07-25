@@ -27,7 +27,7 @@ export function createDemoTopics(now = new Date()): StudyTopic[] {
       activatedAt: `${learnedOn}T05:00:00.000Z`,
       scheduler: "fixed",
       keepWarmDays: 30,
-      note: { markdown: note, revision: 1, updatedAt: now.toISOString() },
+      note: { markdown: note, recallQuestions: [], revision: 1, updatedAt: now.toISOString() },
       reviewState: state,
       ...options,
     };
@@ -35,6 +35,23 @@ export function createDemoTopics(now = new Date()): StudyTopic[] {
 
   return [
     make("demo-active-recall", "Active recall", "Learning science · Memory", "## In my words\n\nActive recall means trying to reconstruct an idea before looking at the answer. The effort of retrieval is the useful part, even when my first attempt is incomplete.", 0, {
+      note: {
+        markdown: "## In my words\n\nActive recall means trying to reconstruct an idea before looking at the answer. The effort of retrieval is the useful part, even when my first attempt is incomplete.",
+        recallQuestions: [
+          {
+            id: "8acefc73-997a-4db5-a24a-afadf8799623",
+            question: "Why is attempting retrieval useful even when the answer is incomplete?",
+            idealAnswer: "The effort of reconstructing the idea strengthens access to it. Feedback then corrects gaps before they become reinforced.",
+          },
+          {
+            id: "1aeef304-29f8-410c-9fc5-622540d3dfd8",
+            question: "What should happen before you reveal the reference answer?",
+            idealAnswer: "Commit to an answer from memory first, then compare it with the reference and correct what was missing or inaccurate.",
+          },
+        ],
+        revision: 1,
+        updatedAt: now.toISOString(),
+      },
       aiNote: {
         id: "ai-active-recall",
         revision: 1,

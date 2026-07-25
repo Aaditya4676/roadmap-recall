@@ -3,19 +3,22 @@
 import { CalendarDays, Plus, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { RecallQuestionFields } from "@/components/recall-question-fields";
 import { dateKey } from "@/lib/date";
+import type { RecallQuestion } from "@/lib/domain/types";
 
 export function CaptureTopic({ roadmapItemId, label = "Add what I learned", initialTitle = "" }: { roadmapItemId?: string; label?: string; initialTitle?: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState(initialTitle);
   const [note, setNote] = useState("");
+  const [recallQuestions, setRecallQuestions] = useState<RecallQuestion[]>([]);
   const [learnedOn, setLearnedOn] = useState(dateKey(new Date()));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   async function submit(event: React.FormEvent) {
     event.preventDefault(); setSaving(true); setError("");
-    const response = await fetch("/api/app/topics", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ roadmapItemId, title: roadmapItemId ? undefined : title, note, learnedOn }) });
+    const response = await fetch("/api/app/topics", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ roadmapItemId, title: roadmapItemId ? undefined : title, note, recallQuestions, learnedOn }) });
     const data = await response.json();
     if (!response.ok) { setError(data.error?.message ?? "Could not save the topic."); setSaving(false); return; }
     setOpen(false); router.push(`/app/topics/${data.id}`); router.refresh();
@@ -36,6 +39,10 @@ export function CaptureTopic({ roadmapItemId, label = "Add what I learned", init
             <form className="mt-6 grid gap-5" onSubmit={submit}>
               {!roadmapItemId && <label className="grid gap-1.5 font-semibold">Topic<input autoFocus required className="field font-normal" value={title} onChange={(event) => setTitle(event.target.value)} /></label>}
               <label className="grid gap-1.5 font-semibold">My notes <span className="text-xs font-normal text-[var(--muted)]">Markdown · your words</span><textarea autoFocus={Boolean(roadmapItemId)} className="field min-h-48 resize-y font-mono text-sm font-normal" value={note} onChange={(event) => setNote(event.target.value)} placeholder="Explain it from memory…" /></label>
+              <details className="border-y border-[var(--border)] py-4">
+                <summary className="cursor-pointer font-semibold">Add recall questions <span className="text-sm font-normal text-[var(--muted)]">(optional)</span></summary>
+                <div className="mt-5"><RecallQuestionFields questions={recallQuestions} onChange={setRecallQuestions} /></div>
+              </details>
               <label className="grid gap-1.5 font-semibold">Learned on<input className="field font-normal" type="date" value={learnedOn} onChange={(event) => setLearnedOn(event.target.value)} /></label>
               {error && <p role="alert" className="text-sm text-[var(--danger)]">{error}</p>}
               <button className="button-primary" data-liquid disabled={saving || (!roadmapItemId && !title.trim())}><CalendarDays size={18} /> {saving ? "Saving…" : "Save and schedule"}</button>

@@ -19,14 +19,36 @@ import { AppShell } from "@/components/app-shell";
 import { ActivityView } from "@/components/activity-view";
 import { Markdown } from "@/components/markdown";
 import { PageHeading } from "@/components/page-heading";
+import { RecallQuestionFields } from "@/components/recall-question-fields";
+import { RecallQuestionReference } from "@/components/recall-question-reference";
 import { activityCalendarRange, buildActivitySummary } from "@/lib/activity";
 import { createDemoActivityEvents, createDemoTopics } from "@/lib/demo-data";
 import { dateKey, humanDate, isDue, isOverdue } from "@/lib/date";
-import type { ReviewRating, StudyTopic } from "@/lib/domain/types";
+import type { RecallQuestion, ReviewRating, StudyTopic } from "@/lib/domain/types";
+import {
+  MAX_RECALL_ANSWER_CHARS,
+  readRecallAnswerSnapshots,
+  readRecallQuestions,
+  readyRecallQuestions,
+} from "@/lib/recall";
 import { createReviewState, scheduleReview } from "@/lib/scheduler";
 
 const STORAGE_KEY = "roadmap-recall-demo-v2";
 const LEGACY_STORAGE_KEY = "roadmap-recall-demo-v1";
+
+function normalizeStoredTopic(value: StudyTopic): StudyTopic {
+  return {
+    ...value,
+    note: {
+      ...value.note,
+      recallQuestions: readRecallQuestions(value.note?.recallQuestions),
+    },
+    reviewState: {
+      ...value.reviewState,
+      latestRecallAnswers: readRecallAnswerSnapshots(value.reviewState?.latestRecallAnswers),
+    },
+  };
+}
 
 function longDate(day: string): string {
   const [year, month, date] = day.split("-").map(Number);
@@ -65,6 +87,7 @@ export function DemoApp() {
   const [captureOpen, setCaptureOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [selected, setSelected] = useState<StudyTopic | null>(null);
+  const [storageError, setStorageError] = useState("");
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -73,23 +96,34 @@ export function DemoApp() {
         const legacy = stored ? null : localStorage.getItem(LEGACY_STORAGE_KEY);
         const saved = stored ?? legacy;
         if (saved) {
-          setTopics(JSON.parse(saved));
+          setTopics((JSON.parse(saved) as StudyTopic[]).map(normalizeStoredTopic));
           if (legacy) {
             localStorage.setItem(STORAGE_KEY, legacy);
             localStorage.removeItem(LEGACY_STORAGE_KEY);
           }
         }
-      } catch { /* a corrupt demo is recoverable from Settings */ }
+      } catch {
+        setStorageError("The saved demo could not be read. Reset the sandbox in Settings to replace the damaged local copy.");
+      }
       setReady(true);
     });
   }, []);
   useEffect(() => {
-    if (ready) localStorage.setItem(STORAGE_KEY, JSON.stringify(topics));
+    if (!ready) return;
+    queueMicrotask(() => {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(topics));
+        setStorageError("");
+      } catch {
+        setStorageError("This browser could not save the demo. Copy any important text before closing this tab.");
+      }
+    });
   }, [ready, topics]);
 
   function reset() {
     setTopics(createDemoTopics());
     localStorage.removeItem(STORAGE_KEY);
+    setStorageError("");
   }
 
   if (!ready) {
@@ -101,6 +135,7 @@ export function DemoApp() {
       <div className="mb-5 rounded-lg border border-[color:var(--accent)]/25 bg-[color:var(--accent-soft)]/70 px-4 py-3 text-sm text-[var(--accent)]">
         <strong>Private sandbox:</strong> everything here stays in this browser. It never reads or writes the production database.
       </div>
+      {storageError && <p className="mb-5 rounded-lg border border-[color:var(--danger)]/35 bg-[color:var(--danger)]/8 px-4 py-3 text-sm text-[var(--danger)]" role="alert">{storageError}</p>}
       {view === "library" ? <DemoLibrary topics={topics} onSelect={setSelected} onCapture={() => setCaptureOpen(true)} />
         : view === "plan" ? <DemoPlan topics={topics} onSelect={setSelected} />
         : view === "activity" || view === "progress" ? <DemoActivity topics={topics} />
@@ -186,13 +221,14 @@ function Setting({ title, copy, children }: { title: string; copy: string; child
 function CaptureModal({ onClose, onSave }: { onClose: () => void; onSave: (topic: StudyTopic) => void }) {
   const [title, setTitle] = useState("");
   const [note, setNote] = useState("");
+  const [recallQuestions, setRecallQuestions] = useState<RecallQuestion[]>([]);
   function submit(event: React.FormEvent) {
     event.preventDefault();
     const now = new Date();
     const state = createReviewState("fixed", now);
-    onSave({ id: `local-${crypto.randomUUID()}`, title: title.trim(), breadcrumb: "Personal topics", kind: "knowledge", part: "frontend", learnedOn: dateKey(now), activatedAt: now.toISOString(), scheduler: "fixed", keepWarmDays: 30, note: { markdown: note, revision: 1, updatedAt: now.toISOString() }, reviewState: state });
+    onSave({ id: `local-${crypto.randomUUID()}`, title: title.trim(), breadcrumb: "Personal topics", kind: "knowledge", part: "frontend", learnedOn: dateKey(now), activatedAt: now.toISOString(), scheduler: "fixed", keepWarmDays: 30, note: { markdown: note, recallQuestions, revision: 1, updatedAt: now.toISOString() }, reviewState: state });
   }
-  return <Modal label="Add a learned topic" onClose={onClose}><p className="eyebrow">Quick capture</p><h2 className="mt-1 text-2xl font-bold">What did you learn?</h2><p className="mt-2 text-sm text-[var(--muted)]">A rough explanation from memory is more useful than polished copied notes.</p><form className="mt-6 grid gap-5" onSubmit={submit}><label className="grid gap-1.5 font-semibold">Topic<input autoFocus required className="field font-normal" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Bayes’ theorem" /></label><label className="grid gap-1.5 font-semibold">My notes <span className="text-xs font-normal text-[var(--muted)]">Markdown supported</span><textarea className="field min-h-44 resize-y font-mono text-sm font-normal" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Explain it in your own words…" /></label><div className="flex justify-end gap-2"><button type="button" className="button-ghost" onClick={onClose}>Cancel</button><button className="button-primary" disabled={!title.trim()}><CalendarDays size={18} /> Save and schedule</button></div></form></Modal>;
+  return <Modal label="Add a learned topic" onClose={onClose}><p className="context-label">Quick capture</p><h2 className="mt-1 text-2xl font-bold">What did you learn?</h2><p className="mt-2 text-sm text-[var(--muted)]">Keep the explanation as reference, then add focused questions you can answer from memory.</p><form className="mt-6 grid gap-5" onSubmit={submit}><label className="grid gap-1.5 font-semibold">Topic<input autoFocus required className="field font-normal" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Bayes’ theorem" /></label><label className="grid gap-1.5 font-semibold">My notes <span className="text-xs font-normal text-[var(--muted)]">Markdown supported</span><textarea className="field min-h-44 resize-y font-mono text-sm font-normal" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Explain it in your own words…" /></label><details className="border-y border-[var(--border)] py-4"><summary className="cursor-pointer font-semibold">Add recall questions <span className="text-sm font-normal text-[var(--muted)]">(optional)</span></summary><div className="mt-5"><RecallQuestionFields questions={recallQuestions} onChange={setRecallQuestions} /></div></details><div className="flex justify-end gap-2"><button type="button" className="button-ghost" onClick={onClose}>Cancel</button><button className="button-primary" disabled={!title.trim()}><CalendarDays size={18} /> Save and schedule</button></div></form></Modal>;
 }
 
 function ReviewModal({ topics, onClose, onUpdate }: { topics: StudyTopic[]; onClose: () => void; onUpdate: (topic: StudyTopic) => void }) {
@@ -201,23 +237,28 @@ function ReviewModal({ topics, onClose, onUpdate }: { topics: StudyTopic[]; onCl
   const [revealed, setRevealed] = useState(false);
   const [aiRevealed, setAiRevealed] = useState(false);
   const [scratch, setScratch] = useState("");
+  const [answers, setAnswers] = useState<Record<string, string>>({});
   const topic = due[index];
+  const recallQuestions = readyRecallQuestions(topic?.note.recallQuestions);
+  const previousById = new Map((topic?.reviewState.latestRecallAnswers ?? []).map((item) => [item.id, item]));
   if (!topic) return <Modal label="Review complete" onClose={onClose}><div className="py-10 text-center"><CheckCircle2 size={42} className="mx-auto text-[var(--accent)]" /><h2 className="mt-4 text-2xl font-bold">Review complete</h2><p className="mt-2 text-[var(--muted)]">That is enough for today.</p><button className="button-primary mt-6" onClick={onClose}>Back to Today</button></div></Modal>;
   function rate(rating: ReviewRating) {
-    const reviewState = scheduleReview(topic.reviewState, rating, new Date(), topic.keepWarmDays);
+    const recallAnswers = recallQuestions.map((item) => ({ ...item, answer: answers[item.id] ?? "" }));
+    const reviewState = { ...scheduleReview(topic.reviewState, rating, new Date(), topic.keepWarmDays), latestRecallAnswers: recallAnswers };
     onUpdate({ ...topic, reviewState });
-    setIndex((value) => value + 1); setRevealed(false); setAiRevealed(false); setScratch("");
+    setIndex((value) => value + 1); setRevealed(false); setAiRevealed(false); setScratch(""); setAnswers({});
   }
-  return <Modal label={`Review ${topic.title}`} onClose={onClose}><div className="flex items-center justify-between gap-4"><p className="eyebrow">Topic {index + 1} of {due.length}</p><span className="text-xs text-[var(--muted)]">Recall before revealing</span></div><h2 className="mt-2 text-balance text-3xl font-bold">{topic.title}</h2><p className="mt-1 text-sm text-[var(--muted)]">{topic.breadcrumb}</p><label className="mt-6 grid gap-2 font-semibold">What can you explain from memory?<textarea autoFocus className="field min-h-32 resize-y font-normal" value={scratch} onChange={(e) => setScratch(e.target.value)} placeholder="Private scratchpad for this review…" /></label>{!revealed ? <button className="button-primary mt-5 w-full" data-liquid onClick={() => setRevealed(true)}>Reveal my notes</button> : <><div className="reading-plane mt-5 p-5"><p className="eyebrow mb-3">My notes</p><Markdown>{topic.note.markdown || "_No notes yet._"}</Markdown></div>{topic.aiNote && !topic.aiNote.hidden && (!aiRevealed ? <button className="button-secondary mt-3 w-full" data-liquid onClick={() => setAiRevealed(true)}><Sparkles size={17} /> Reveal separate AI notes</button> : <div className="ai-plane mt-3 p-5"><p className="eyebrow mb-3">AI notes · {topic.aiNote.model}</p><p>{topic.aiNote.document.summary}</p><ul className="mt-3 list-disc pl-5">{topic.aiNote.document.keyPoints.map((point) => <li key={point}>{point}</li>)}</ul></div>)}<p className="mb-2 mt-6 text-center text-sm font-semibold">How well did you recall it?</p><div className="grid grid-cols-3 gap-2">{(["again", "hard", "good"] as const).map((rating) => <button key={rating} data-liquid className={rating === "good" ? "button-primary !px-2 capitalize" : "button-secondary !px-2 capitalize"} onClick={() => rate(rating)}>{rating}</button>)}</div></> }</Modal>;
+  return <Modal label={`Review ${topic.title}`} onClose={onClose}><div className="flex items-center justify-between gap-4"><p className="context-label">Topic {index + 1} of {due.length}</p><span className="text-xs text-[var(--muted)]">Recall before revealing</span></div><h2 className="mt-2 text-balance text-3xl font-bold">{topic.title}</h2><p className="mt-1 text-sm text-[var(--muted)]">{topic.breadcrumb}</p>{recallQuestions.length ? <ol className="mt-6 divide-y divide-[var(--border)] border-y border-[var(--border)]">{recallQuestions.map((item, questionIndex) => { const candidate = previousById.get(item.id); const previous = candidate?.question === item.question && candidate.idealAnswer === item.idealAnswer ? candidate : undefined; return <li className="py-5" key={item.id}><label className="grid gap-2 font-semibold"><span>{questionIndex + 1}. {item.question}</span><textarea autoFocus={questionIndex === 0} readOnly={revealed} maxLength={MAX_RECALL_ANSWER_CHARS} className="field min-h-28 resize-y font-normal" value={answers[item.id] ?? ""} onChange={(event) => setAnswers((current) => ({ ...current, [item.id]: event.target.value }))} placeholder="Answer from memory…" /></label>{revealed && <div className="mt-4 grid gap-4 border-l-2 border-[var(--accent)] pl-4"><div><p className="mb-1 text-xs font-bold text-[var(--muted)]">Ideal answer</p><Markdown>{item.idealAnswer}</Markdown></div>{previous && <div><p className="mb-1 text-xs font-bold text-[var(--muted)]">Previous attempt</p><p className="whitespace-pre-wrap text-sm">{previous.answer || "No answer was entered."}</p></div>}</div>}</li>; })}</ol> : <label className="mt-6 grid gap-2 font-semibold">What can you explain from memory?<textarea autoFocus className="field min-h-32 resize-y font-normal" value={scratch} onChange={(e) => setScratch(e.target.value)} placeholder="Private scratchpad for this review…" /></label>}{!revealed ? <button className="button-primary mt-5 w-full" data-liquid onClick={() => setRevealed(true)}>{recallQuestions.length ? "Check my answers" : "Reveal my notes"}</button> : <>{recallQuestions.length ? <details className="mt-5 border-y border-[var(--border)] py-4"><summary className="cursor-pointer font-semibold text-[var(--muted)]">Open full reference note</summary><div className="reading-plane mt-4 p-5"><Markdown>{topic.note.markdown || "_No notes yet._"}</Markdown></div></details> : <div className="reading-plane mt-5 p-5"><p className="context-label mb-3">My notes</p><Markdown>{topic.note.markdown || "_No notes yet._"}</Markdown></div>}{topic.aiNote && !topic.aiNote.hidden && (!aiRevealed ? <button className="button-secondary mt-3 w-full" data-liquid onClick={() => setAiRevealed(true)}><Sparkles size={17} /> Reveal separate AI notes</button> : <div className="ai-plane mt-3 p-5"><p className="context-label mb-3">AI notes · {topic.aiNote.model}</p><p>{topic.aiNote.document.summary}</p><ul className="mt-3 list-disc pl-5">{topic.aiNote.document.keyPoints.map((point) => <li key={point}>{point}</li>)}</ul></div>)}<p className="mb-2 mt-6 text-center text-sm font-semibold">How well did you recall it?</p><div className="grid grid-cols-3 gap-2">{(["again", "hard", "good"] as const).map((rating) => <button key={rating} data-liquid className={rating === "good" ? "button-primary !px-2 capitalize" : "button-secondary !px-2 capitalize"} onClick={() => rate(rating)}>{rating}</button>)}</div></>}</Modal>;
 }
 
 function TopicModal({ topic, onClose, onUpdate }: { topic: StudyTopic; onClose: () => void; onUpdate: (topic: StudyTopic) => void }) {
   const [editing, setEditing] = useState(false);
   const [note, setNote] = useState(topic.note.markdown);
+  const [recallQuestions, setRecallQuestions] = useState(topic.note.recallQuestions ?? []);
   const stale = topic.aiNote && topic.aiNote.sourceNoteRevision < topic.note.revision;
   function save() {
-    onUpdate({ ...topic, note: { markdown: note, revision: topic.note.revision + 1, updatedAt: new Date().toISOString() } }); setEditing(false);
+    onUpdate({ ...topic, note: { markdown: note, recallQuestions, revision: topic.note.revision + 1, updatedAt: new Date().toISOString() } }); setEditing(false);
   }
   const sourceLabel = topic.breadcrumb === "Personal topics" ? "Personal topic" : topic.part === "frontend" ? "Primary plan" : "Extension plan";
-  return <Modal label={topic.title} onClose={onClose}><p className="eyebrow">{sourceLabel}</p><h2 className="mt-2 text-balance text-3xl font-bold">{topic.title}</h2><p className="mt-1 text-sm text-[var(--muted)]">{topic.breadcrumb}</p><div className="mt-5 flex flex-wrap gap-2 text-xs"><span className="rounded-md border border-[var(--border)] bg-[color:var(--surface)]/60 px-3 py-1">Next review {humanDate(topic.reviewState.dueOn)}</span><span className="rounded-md border border-[var(--border)] bg-[color:var(--surface)]/60 px-3 py-1 capitalize">{topic.scheduler}</span></div><section className="mt-7"><div className="mb-3 flex items-center justify-between"><h3 className="text-lg font-bold">My notes</h3>{editing ? <div className="flex gap-2"><button className="button-ghost !min-h-9" onClick={() => setEditing(false)}>Cancel</button><button className="button-primary !min-h-9" data-liquid onClick={save}>Save</button></div> : <button className="button-secondary !min-h-9" data-liquid onClick={() => setEditing(true)}>Edit</button>}</div>{editing ? <textarea className="field min-h-64 resize-y font-mono text-sm" value={note} onChange={(e) => setNote(e.target.value)} /> : <div className="reading-plane p-5"><Markdown>{topic.note.markdown || "_No personal notes yet._"}</Markdown></div>}</section>{topic.aiNote && !topic.aiNote.hidden && <section className="mt-7"><div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h3 className="inline-flex items-center gap-2 text-lg font-bold"><Sparkles size={18} className="text-[var(--plum)]" /> AI notes</h3><span className="text-xs text-[var(--muted)]">{topic.aiNote.provider} · {topic.aiNote.model}</span></div>{stale && <p className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-3 text-sm text-[var(--muted)]">Your notes changed after this explanation was generated. It may still be useful.</p>}<div className="ai-plane p-5"><p>{topic.aiNote.document.summary}</p><h4 className="mt-4 font-bold">Key points</h4><ul className="mt-2 list-disc pl-5">{topic.aiNote.document.keyPoints.map((point) => <li key={point}>{point}</li>)}</ul><h4 className="mt-4 font-bold">Pitfalls</h4><ul className="mt-2 list-disc pl-5">{topic.aiNote.document.pitfalls.map((point) => <li key={point}>{point}</li>)}</ul></div></section>}</Modal>;
+  return <Modal label={topic.title} onClose={onClose}><p className="context-label">{sourceLabel}</p><h2 className="mt-2 text-balance text-3xl font-bold">{topic.title}</h2><p className="mt-1 text-sm text-[var(--muted)]">{topic.breadcrumb}</p><div className="mt-5 flex flex-wrap gap-2 text-xs"><span className="rounded-md border border-[var(--border)] bg-[color:var(--surface)]/60 px-3 py-1">Next review {humanDate(topic.reviewState.dueOn)}</span><span className="rounded-md border border-[var(--border)] bg-[color:var(--surface)]/60 px-3 py-1 capitalize">{topic.scheduler}</span></div><section className="mt-7"><div className="mb-3 flex items-center justify-between"><h3 className="text-lg font-bold">My notes</h3>{editing ? <div className="flex gap-2"><button className="button-ghost !min-h-9" onClick={() => setEditing(false)}>Cancel</button><button className="button-primary !min-h-9" data-liquid onClick={save}>Save</button></div> : <button className="button-secondary !min-h-9" data-liquid onClick={() => setEditing(true)}>Edit</button>}</div>{editing ? <div className="grid gap-7"><textarea className="field min-h-64 resize-y font-mono text-sm" value={note} onChange={(e) => setNote(e.target.value)} /><RecallQuestionFields questions={recallQuestions} onChange={setRecallQuestions} /></div> : <><div className="reading-plane p-5"><Markdown>{topic.note.markdown || "_No personal notes yet._"}</Markdown></div><RecallQuestionReference questions={topic.note.recallQuestions ?? []} latestAnswers={topic.reviewState.latestRecallAnswers ?? []} /></>}</section>{topic.aiNote && !topic.aiNote.hidden && <section className="mt-7"><div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h3 className="inline-flex items-center gap-2 text-lg font-bold"><Sparkles size={18} className="text-[var(--plum)]" /> AI notes</h3><span className="text-xs text-[var(--muted)]">{topic.aiNote.provider} · {topic.aiNote.model}</span></div>{stale && <p className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-3 text-sm text-[var(--muted)]">Your notes changed after this explanation was generated. It may still be useful.</p>}<div className="ai-plane p-5"><p>{topic.aiNote.document.summary}</p><h4 className="mt-4 font-bold">Key points</h4><ul className="mt-2 list-disc pl-5">{topic.aiNote.document.keyPoints.map((point) => <li key={point}>{point}</li>)}</ul><h4 className="mt-4 font-bold">Pitfalls</h4><ul className="mt-2 list-disc pl-5">{topic.aiNote.document.pitfalls.map((point) => <li key={point}>{point}</li>)}</ul></div></section>}</Modal>;
 }

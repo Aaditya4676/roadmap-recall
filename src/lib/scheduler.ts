@@ -65,6 +65,7 @@ export function createReviewStateFromDay(
     reviewCount: 0,
     fixedStage: 0,
     fsrsCard: scheduler === "fsrs" ? serializeCard(card) : null,
+    latestRecallAnswers: [],
   };
 }
 

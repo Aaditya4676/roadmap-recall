@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { decodeCursor, encodeCursor, logAiAction, requireAiAction } from "@/lib/ai/action-auth";
 import { errorResponse, HttpError } from "@/lib/auth";
+import { readRecallQuestions, recallQuestionsMarkdown } from "@/lib/recall";
 
 const CHUNK = 24_000;
 
@@ -10,13 +11,16 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     audit = await requireAiAction(request);
     const { id } = await context.params;
     const offset = decodeCursor(new URL(request.url).searchParams.get("cursor"));
-    const { data: topic, error } = await audit.db.from("study_topics").select("id, title, breadcrumb, kind, part, personal_notes(markdown, revision), ai_notes(revision, source_note_revision)").eq("owner_id", audit.owner.id).eq("id", id).maybeSingle();
+    const { data: topic, error } = await audit.db.from("study_topics").select("id, title, breadcrumb, kind, part, personal_notes(markdown, recall_questions, revision), ai_notes(revision, source_note_revision)").eq("owner_id", audit.owner.id).eq("id", id).maybeSingle();
     if (error) throw error;
     if (!topic) throw new HttpError(404, "Topic not found.", "not_found");
     const personal: any = Array.isArray(topic.personal_notes) ? topic.personal_notes[0] : topic.personal_notes;
     const ai: any = Array.isArray(topic.ai_notes) ? topic.ai_notes[0] : topic.ai_notes;
     if (!personal) throw new HttpError(409, "This topic has no personal-note record. Repair it in the owner workspace first.", "missing_personal_note");
-    const fullText = audit.owner.ai_action_share_personal_notes ? personal.markdown : "";
+    const questionText = recallQuestionsMarkdown(readRecallQuestions(personal.recall_questions));
+    const fullText = audit.owner.ai_action_share_personal_notes
+      ? [personal.markdown, questionText].filter(Boolean).join("\n\n")
+      : "";
     const chunk = fullText.slice(offset, offset + CHUNK);
     const response = {
       topic: { id: topic.id, title: topic.title, breadcrumb: topic.breadcrumb, kind: topic.kind, part: topic.part },

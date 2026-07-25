@@ -3,21 +3,116 @@
 import { CheckCircle2, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Markdown } from "@/components/markdown";
-import type { ReviewRating, StudyTopic } from "@/lib/domain/types";
+import type { RecallQuestion, ReviewRating, ReviewState, StudyTopic } from "@/lib/domain/types";
+import {
+  MAX_RECALL_ANSWER_CHARS,
+  MAX_RECALL_TOTAL_CHARS,
+  readRecallAnswerSnapshots,
+  readyRecallQuestions,
+} from "@/lib/recall";
+
+type ReviewResponse = {
+  reviewState?: ReviewState;
+  error?: {
+    message?: string;
+    issues?: Array<{ message?: string }>;
+  };
+};
+
+function responseErrorMessage(data: ReviewResponse, fallback: string): string {
+  return data.error?.message
+    ?? data.error?.issues?.find((issue) => issue.message)?.message
+    ?? fallback;
+}
+
+function QuestionRecall({
+  questions,
+  answers,
+  previous,
+  revealed,
+  onAnswer,
+}: {
+  questions: RecallQuestion[];
+  answers: Record<string, string>;
+  previous: StudyTopic["reviewState"]["latestRecallAnswers"];
+  revealed: boolean;
+  onAnswer: (id: string, answer: string) => void;
+}) {
+  const previousById = new Map(previous.map((item) => [item.id, item]));
+  const answeredCount = questions.filter((item) => (answers[item.id] ?? "").trim()).length;
+  return (
+    <section className="mt-7" aria-labelledby="question-recall-heading">
+      <div className="mb-4">
+        <h2 id="question-recall-heading" className="text-lg font-bold">Answer from memory</h2>
+        <p className="mt-1 text-sm text-[var(--muted)]">
+          Commit to an answer before checking the reference. A blank answer is still useful evidence about what needs work.
+        </p>
+        <p className="mt-1 text-xs font-semibold text-[var(--muted)]">{answeredCount} of {questions.length} answered</p>
+      </div>
+      <ol className="divide-y divide-[var(--border)] border-y border-[var(--border)]">
+        {questions.map((item, index) => {
+          const candidate = previousById.get(item.id);
+          const prior = candidate?.question === item.question && candidate.idealAnswer === item.idealAnswer
+            ? candidate
+            : undefined;
+          return (
+            <li className="py-5" key={item.id}>
+              <label className="grid gap-2 font-semibold">
+                <span>{index + 1}. {item.question}</span>
+                <textarea
+                  autoFocus={index === 0}
+                  className="field min-h-28 resize-y font-normal"
+                  maxLength={MAX_RECALL_ANSWER_CHARS}
+                  readOnly={revealed}
+                  value={answers[item.id] ?? ""}
+                  onChange={(event) => onAnswer(item.id, event.target.value)}
+                  placeholder="Explain it without opening your notes…"
+                />
+              </label>
+              {revealed && (
+                <div className="mt-4 grid gap-4 border-l-2 border-[var(--accent)] pl-4">
+                  <div>
+                    <p className="mb-1 text-xs font-bold text-[var(--muted)]">Ideal answer</p>
+                    <Markdown>{item.idealAnswer}</Markdown>
+                  </div>
+                  {prior && (
+                    <div>
+                      <p className="mb-1 text-xs font-bold text-[var(--muted)]">Previous attempt</p>
+                      <p className="whitespace-pre-wrap text-sm">{prior.answer || "No answer was entered."}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </section>
+  );
+}
 
 export function ReviewSession({ initialTopics }: { initialTopics: StudyTopic[] }) {
   const router = useRouter();
   const [topics, setTopics] = useState(initialTopics);
   const [index, setIndex] = useState(0);
   const [scratchpad, setScratchpad] = useState("");
+  const [answers, setAnswers] = useState<Record<string, string>>({});
   const [append, setAppend] = useState(false);
   const [revealed, setRevealed] = useState(false);
   const [aiRevealed, setAiRevealed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [answerError, setAnswerError] = useState("");
+  const [conflict, setConflict] = useState(false);
+  const inFlight = useRef(false);
+  const request = useRef<AbortController | null>(null);
   const topic = topics[index];
+  const recallQuestions = topic ? readyRecallQuestions(topic.note.recallQuestions) : [];
+  const usesQuestions = recallQuestions.length > 0;
+
+  useEffect(() => () => request.current?.abort(), []);
 
   if (!topic) {
     return (
@@ -30,27 +125,70 @@ export function ReviewSession({ initialTopics }: { initialTopics: StudyTopic[] }
     );
   }
 
-  async function rate(rating: ReviewRating) {
-    setSaving(true);
-    setError("");
-    const response = await fetch(`/api/app/topics/${topic.id}/review`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ rating, expectedReviewCount: topic.reviewState.reviewCount, scratchpad, appendScratchpad: append }),
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      setError(data.error?.message ?? "Could not save the review.");
-      setSaving(false);
+  function updateAnswer(id: string, answer: string) {
+    const total = Object.entries(answers).reduce(
+      (sum, [questionId, value]) => sum + (questionId === id ? 0 : value.length),
+      answer.length,
+    );
+    if (total > MAX_RECALL_TOTAL_CHARS) {
+      setAnswerError("Your answers can use up to 100,000 characters in one review.");
       return;
     }
-    setTopics((current) => current.map((item) => item.id === topic.id ? { ...item, reviewState: data.reviewState } : item));
-    setIndex((value) => value + 1);
-    setScratchpad("");
-    setAppend(false);
-    setRevealed(false);
-    setAiRevealed(false);
-    setSaving(false);
+    setAnswerError("");
+    setAnswers((current) => ({ ...current, [id]: answer }));
+  }
+
+  async function rate(rating: ReviewRating) {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setSaving(true);
+    setError("");
+    setConflict(false);
+    const controller = new AbortController();
+    request.current = controller;
+    try {
+      const response = await fetch(`/api/app/topics/${topic.id}/review`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({
+          rating,
+          expectedReviewCount: topic.reviewState.reviewCount,
+          scratchpad: usesQuestions ? "" : scratchpad,
+          appendScratchpad: usesQuestions ? false : append,
+          recallAnswers: recallQuestions.map((item) => ({ questionId: item.id, answer: answers[item.id] ?? "" })),
+        }),
+      });
+      const data = await response.json() as ReviewResponse;
+      if (!response.ok) {
+        setError(responseErrorMessage(data, "Could not save the review."));
+        setConflict(response.status === 409);
+        return;
+      }
+      if (!data.reviewState) throw new Error("The review response was incomplete.");
+      const reviewState = {
+        ...data.reviewState,
+        latestRecallAnswers: readRecallAnswerSnapshots(data.reviewState.latestRecallAnswers),
+      };
+      setTopics((current) => current.map((item) => item.id === topic.id ? { ...item, reviewState } : item));
+      setIndex((value) => value + 1);
+      setScratchpad("");
+      setAnswers({});
+      setAppend(false);
+      setRevealed(false);
+      setAiRevealed(false);
+      setAnswerError("");
+    } catch (requestError) {
+      if (!controller.signal.aborted) {
+        setError(requestError instanceof Error && requestError.message
+          ? requestError.message
+          : "The review could not be saved. Check your connection and try again.");
+      }
+    } finally {
+      if (request.current === controller) request.current = null;
+      inFlight.current = false;
+      if (!controller.signal.aborted) setSaving(false);
+    }
   }
 
   return (
@@ -63,36 +201,64 @@ export function ReviewSession({ initialTopics }: { initialTopics: StudyTopic[] }
         <div className="h-full bg-[var(--accent)] transition-all" style={{ width: `${(index / topics.length) * 100}%` }} />
       </div>
       <article className="liquid-panel mt-5 rounded-[12px] p-5 sm:p-8" data-liquid>
-        <p className="eyebrow">Recall before reveal</p>
+        <p className="context-label">Recall before reveal</p>
         <h1 className="mt-2 text-balance text-3xl font-bold sm:text-4xl">{topic.title}</h1>
         <p className="mt-1 text-sm text-[var(--muted)]">{topic.breadcrumb}</p>
-        <label className="mt-7 grid gap-2 font-semibold">
-          What can you explain from memory?
-          <textarea autoFocus className="field min-h-36 resize-y font-normal" value={scratchpad} onChange={(event) => setScratchpad(event.target.value)} placeholder="Use this space to reconstruct the idea…" />
-        </label>
-        <label className="mt-3 flex items-start gap-2 text-sm text-[var(--muted)]">
-          <input className="mt-1" type="checkbox" checked={append} onChange={(event) => setAppend(event.target.checked)} />
-          Append this scratchpad to my personal note after rating
-        </label>
 
-        {!revealed ? (
-          <button className="button-primary mt-6 w-full" data-liquid onClick={() => setRevealed(true)}>Reveal my notes</button>
+        {usesQuestions ? (
+          <QuestionRecall
+            questions={recallQuestions}
+            answers={answers}
+            previous={topic.reviewState.latestRecallAnswers}
+            revealed={revealed}
+            onAnswer={updateAnswer}
+          />
         ) : (
           <>
-            <section className="reading-plane mt-6 p-5">
-              <p className="eyebrow mb-3">My notes</p>
-              <Markdown>{topic.note.markdown || "_No note was captured._"}</Markdown>
-            </section>
+            <label className="mt-7 grid gap-2 font-semibold">
+              What can you explain from memory?
+              <textarea autoFocus className="field min-h-36 resize-y font-normal" value={scratchpad} onChange={(event) => setScratchpad(event.target.value)} placeholder="Use this space to reconstruct the idea…" />
+            </label>
+            <label className="mt-3 flex items-start gap-2 text-sm text-[var(--muted)]">
+              <input className="mt-1" type="checkbox" checked={append} onChange={(event) => setAppend(event.target.checked)} />
+              Append this scratchpad to my personal note after rating
+            </label>
+          </>
+        )}
+        {answerError && <p role="alert" className="mt-3 text-sm text-[var(--danger)]">{answerError}</p>}
+
+        {!revealed ? (
+          <button className="button-primary mt-6 w-full" data-liquid onClick={() => setRevealed(true)}>
+            {usesQuestions ? "Check my answers" : "Reveal my notes"}
+          </button>
+        ) : (
+          <>
+            {usesQuestions ? (
+              <details className="mt-5 border-y border-[var(--border)] py-4">
+                <summary className="cursor-pointer font-semibold text-[var(--muted)]">Open full reference note</summary>
+                <div className="reading-plane mt-4 p-5">
+                  <Markdown>{topic.note.markdown || "_No reference note was captured._"}</Markdown>
+                </div>
+              </details>
+            ) : (
+              <section className="reading-plane mt-6 p-5">
+                <p className="context-label mb-3">My notes</p>
+                <Markdown>{topic.note.markdown || "_No note was captured._"}</Markdown>
+              </section>
+            )}
             {topic.aiNote && !topic.aiNote.hidden && (
               !aiRevealed ? (
                 <button className="button-secondary mt-3 w-full" data-liquid onClick={() => setAiRevealed(true)}><Sparkles size={17} /> Reveal separate AI notes</button>
               ) : (
                 <section className="ai-plane mt-3 p-5">
-                  <p className="eyebrow mb-3">AI notes · {topic.aiNote.model}</p>
+                  <p className="context-label mb-3">AI notes · {topic.aiNote.model}</p>
                   <p>{topic.aiNote.document.summary}</p>
                   <ul className="mt-3 list-disc pl-5">{topic.aiNote.document.keyPoints.map((point) => <li key={point}>{point}</li>)}</ul>
                 </section>
               )
+            )}
+            {usesQuestions && recallQuestions.some((item) => !(answers[item.id] ?? "").trim()) && (
+              <p className="mt-5 text-center text-sm text-[var(--warning)]">Some answers were blank. That is useful feedback—consider Again if you could not retrieve them.</p>
             )}
             <p className="mb-2 mt-7 text-center text-sm font-bold">How well did you recall it?</p>
             <div className={`grid gap-2 ${topic.scheduler === "fsrs" ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3"}`}>
@@ -101,6 +267,11 @@ export function ReviewSession({ initialTopics }: { initialTopics: StudyTopic[] }
               ))}
             </div>
             {error && <p role="alert" className="mt-4 text-center text-sm text-[var(--danger)]">{error}</p>}
+            {conflict && (
+              <button type="button" className="button-secondary mx-auto mt-3" onClick={() => window.location.reload()}>
+                Reload this session
+              </button>
+            )}
           </>
         )}
       </article>

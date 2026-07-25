@@ -8,6 +8,7 @@ import {
   type LibraryTopicSummary,
   type TopicSummary,
 } from "@/lib/domain/topic-summary";
+import { readRecallAnswerSnapshots, readRecallQuestions } from "@/lib/recall";
 import { selectAllByOwner } from "@/lib/supabase/pagination";
 import { getAuthenticatedUser } from "@/lib/supabase/server";
 
@@ -38,6 +39,7 @@ function mapTopic(row: any): StudyTopic {
     keepWarmDays: row.keep_warm_days,
     note: {
       markdown: note?.markdown ?? "",
+      recallQuestions: readRecallQuestions(note?.recall_questions),
       revision: note?.revision ?? 1,
       updatedAt: note?.updated_at ?? row.updated_at,
     },
@@ -49,6 +51,7 @@ function mapTopic(row: any): StudyTopic {
       reviewCount: state.review_count,
       fixedStage: state.fixed_stage,
       fsrsCard: state.fsrs_card,
+      latestRecallAnswers: readRecallAnswerSnapshots(state.latest_recall_answers),
     },
     aiNote,
   };
