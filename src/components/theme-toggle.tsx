@@ -44,9 +44,19 @@ export function ThemeToggle() {
     const bounds = source.getBoundingClientRect();
     const x = bounds.left + bounds.width / 2;
     const y = bounds.top + bounds.height / 2;
-    const farthestX = Math.max(x, window.innerWidth - x);
-    const farthestY = Math.max(y, window.innerHeight - y);
-    const radius = Math.hypot(farthestX, farthestY);
+    const viewportWidth = Math.max(
+      window.innerWidth,
+      root.clientWidth,
+      window.visualViewport?.width ?? 0,
+    );
+    const viewportHeight = Math.max(
+      window.innerHeight,
+      root.clientHeight,
+      window.visualViewport?.height ?? 0,
+    );
+    const farthestX = Math.max(x, viewportWidth - x);
+    const farthestY = Math.max(y, viewportHeight - y);
+    const radius = Math.ceil(Math.hypot(farthestX, farthestY) * 1.08 + 48);
 
     transitioning.current = true;
     source.setAttribute("aria-busy", "true");
