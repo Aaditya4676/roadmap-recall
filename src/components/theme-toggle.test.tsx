@@ -69,6 +69,7 @@ describe("ThemeToggle", () => {
     });
     Object.defineProperty(window, "innerWidth", { configurable: true, value: 1000 });
     Object.defineProperty(window, "innerHeight", { configurable: true, value: 800 });
+    vi.stubGlobal("screen", { width: 3440, height: 1440 });
 
     render(<ThemeToggle />);
     const button = screen.getByRole("button", { name: "Toggle color theme" });
@@ -94,7 +95,10 @@ describe("ThemeToggle", () => {
     expect(root).toHaveClass("theme-transition-active");
     expect(root.style.getPropertyValue("--theme-transition-x")).toBe("40px");
     expect(root.style.getPropertyValue("--theme-transition-y")).toBe("50px");
-    expect(Number.parseFloat(root.style.getPropertyValue("--theme-transition-radius"))).toBeGreaterThan(1000);
+    const requiredRadius = Math.hypot(Math.max(40, 1000 - 40), Math.max(50, 800 - 50));
+    const radius = Number.parseFloat(root.style.getPropertyValue("--theme-transition-radius"));
+    expect(radius).toBeGreaterThan(requiredRadius + 40);
+    expect(radius).toBeLessThan(requiredRadius * 1.2);
     expect(button).toHaveAttribute("aria-busy", "true");
 
     await act(async () => {

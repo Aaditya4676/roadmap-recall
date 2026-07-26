@@ -42,9 +42,55 @@ test("theme change radiates from the toggle and persists", async ({ page }) => {
 
   expect(transition.x).toBeCloseTo((bounds?.x ?? 0) + (bounds?.width ?? 0) / 2, 0);
   expect(transition.y).toBeCloseTo((bounds?.y ?? 0) + (bounds?.height ?? 0) / 2, 0);
-  expect(transition.radius).toBeGreaterThan(500);
+  const viewport = page.viewportSize();
+  const farthestCorner = Math.hypot(
+    Math.max(transition.x, (viewport?.width ?? 0) - transition.x),
+    Math.max(transition.y, (viewport?.height ?? 0) - transition.y),
+  );
+  expect(transition.radius).toBeGreaterThan(farthestCorner * 1.05 + 40);
   await expect(root).not.toHaveClass(/theme-transition-active/);
   expect(await page.evaluate(() => localStorage.getItem("roadmap-recall-theme"))).toBe("dark");
+});
+
+test("main navigation ripples from the selected tab without shifting the page", async ({ page }) => {
+  await page.goto("/demo");
+  const library = page.getByRole("link", { name: "Library", exact: true });
+  await expect(library).toBeVisible();
+
+  await library.click();
+
+  const ripple = page.locator("[data-navigation-ripple]");
+  await expect(ripple).toBeVisible();
+  const bounds = await library.boundingBox();
+  const origin = await ripple.evaluate((element) => {
+    const style = (element as HTMLElement).style;
+    return {
+      x: Number.parseFloat(style.getPropertyValue("--navigation-ripple-x")),
+      y: Number.parseFloat(style.getPropertyValue("--navigation-ripple-y")),
+    };
+  });
+  expect(Math.abs(origin.x - ((bounds?.x ?? 0) + (bounds?.width ?? 0) / 2))).toBeLessThan(1.5);
+  expect(Math.abs(origin.y - ((bounds?.y ?? 0) + (bounds?.height ?? 0) / 2))).toBeLessThan(1.5);
+  await expect(page.getByRole("heading", { name: "Library", exact: true })).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator("main")).not.toHaveAttribute("aria-busy", "true");
+  const viewport = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }));
+  expect(viewport.scrollWidth).toBeLessThanOrEqual(viewport.clientWidth);
+  await expect(ripple).toHaveCount(0);
+});
+
+test("reduced motion uses static navigation feedback", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/demo");
+  await page.getByRole("link", { name: "Activity", exact: true }).click();
+
+  const ripple = page.locator("[data-navigation-ripple]");
+  await expect(ripple).toHaveAttribute("data-phase", "static");
+  expect(await ripple.evaluate((element) => element.getAnimations({ subtree: true }).length)).toBe(0);
+  await expect(page.getByRole("heading", { name: "Activity", exact: true })).toBeVisible();
+  await expect(ripple).toHaveCount(0);
 });
 
 test("quick capture schedules a local topic without a network write", async ({ page }) => {

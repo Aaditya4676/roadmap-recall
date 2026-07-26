@@ -1,9 +1,18 @@
 "use client";
 
-import { BarChart3, BookOpen, CalendarCheck2, ListTree, LoaderCircle, Settings, type LucideIcon } from "lucide-react";
-import Link, { useLinkStatus } from "next/link";
+import { BarChart3, BookOpen, CalendarCheck2, ListTree, Settings, type LucideIcon } from "lucide-react";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { MouseEvent } from "react";
 import { Logo } from "@/components/logo";
+import {
+  getNavigationRippleOrigin,
+  isSameNavigationTarget,
+  NavigationRipple,
+  shouldCancelNavigationRipple,
+  shouldStartNavigationRipple,
+  useNavigationRipple,
+} from "@/components/navigation-ripple";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 const navigation = [
@@ -15,12 +24,50 @@ const navigation = [
 ];
 
 function NavContent({ icon: Icon, label, mobile = false }: { icon: LucideIcon; label: string; mobile?: boolean }) {
-  const { pending } = useLinkStatus();
-  return <>{pending ? <LoaderCircle className="animate-spin" size={mobile ? 18 : 19} aria-hidden /> : <Icon size={mobile ? 18 : 19} aria-hidden />}{mobile ? <span>{label}</span> : label}</>;
+  return <><Icon size={mobile ? 18 : 19} aria-hidden />{mobile ? <span>{label}</span> : label}</>;
 }
 
 export function AppShell({ children, demo = false, demoView = "today" }: { children: React.ReactNode; demo?: boolean; demoView?: string }) {
   const pathname = usePathname();
+  const navigationKey = demo ? `demo:${demoView}` : `path:${pathname}`;
+  const { ripple, begin, cancel, busy } = useNavigationRipple(navigationKey);
+
+  function handleNavigation(
+    event: MouseEvent<HTMLAnchorElement>,
+    href: string,
+    targetDemoView: string,
+    label: string,
+  ) {
+    const sameTarget = demo
+      ? demoView === targetDemoView
+      : isSameNavigationTarget(pathname, href);
+    const activation = {
+      defaultPrevented: event.defaultPrevented,
+      button: event.button,
+      metaKey: event.metaKey,
+      ctrlKey: event.ctrlKey,
+      shiftKey: event.shiftKey,
+      altKey: event.altKey,
+      sameTarget,
+      themeTransitionActive: document.documentElement.classList.contains("theme-transition-active"),
+    };
+
+    if (shouldCancelNavigationRipple(activation)) {
+      cancel();
+      return;
+    }
+
+    if (!shouldStartNavigationRipple(activation)) return;
+
+    const origin = getNavigationRippleOrigin(event);
+    begin({
+      ...origin,
+      label,
+      targetKey: demo ? `demo:${targetDemoView}` : `path:${href}`,
+      reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+    });
+  }
+
   return (
     <div className="min-h-screen md:grid md:grid-cols-[240px_1fr]">
       <aside className="app-sidebar liquid-chrome fixed inset-y-0 left-0 z-20 hidden w-[240px] px-4 py-5 md:flex md:flex-col" data-liquid>
@@ -31,11 +78,16 @@ export function AppShell({ children, demo = false, demoView = "today" }: { child
             const active = demo
               ? demoView === targetDemoView
               : pathname.startsWith(href) || (href === "/app/library" && pathname.startsWith("/app/topics/"));
+            const targetKey = demo ? `demo:${targetDemoView}` : `path:${href}`;
+            const pending = Boolean(ripple && !ripple.contentCommitted && ripple.targetKey === targetKey);
             return (
               <Link
                 key={href}
                 href={demo ? `/demo?view=${targetDemoView}` : href}
                 aria-current={active ? "page" : undefined}
+                aria-busy={pending || undefined}
+                data-navigation-pending={pending ? "true" : undefined}
+                onClick={(event) => handleNavigation(event, href, targetDemoView, label)}
                 className="nav-link flex min-h-11 items-center gap-3 rounded-md px-3 font-semibold text-[var(--muted)] hover:bg-[color:var(--subtle)]/70 hover:text-[var(--foreground)]"
               >
                 <NavContent icon={icon} label={label} />
@@ -54,7 +106,7 @@ export function AppShell({ children, demo = false, demoView = "today" }: { child
           <Logo />
           <ThemeToggle />
         </header>
-        <main className="mx-auto w-full max-w-6xl px-5 pb-28 pt-8 sm:px-8 md:pb-12 md:pt-10">{children}</main>
+        <main aria-busy={busy || undefined} className="mx-auto w-full max-w-6xl px-5 pb-28 pt-8 sm:px-8 md:pb-12 md:pt-10">{children}</main>
       </div>
 
       <nav className="mobile-chrome liquid-chrome fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-[var(--glass-line-low)] p-1.5 md:hidden" data-liquid aria-label="Mobile navigation">
@@ -62,13 +114,30 @@ export function AppShell({ children, demo = false, demoView = "today" }: { child
           const active = demo
             ? demoView === targetDemoView
             : pathname.startsWith(href) || (href === "/app/library" && pathname.startsWith("/app/topics/"));
+          const targetKey = demo ? `demo:${targetDemoView}` : `path:${href}`;
+          const pending = Boolean(ripple && !ripple.contentCommitted && ripple.targetKey === targetKey);
           return (
-            <Link key={href} href={demo ? `/demo?view=${targetDemoView}` : href} aria-current={active ? "page" : undefined} className="mobile-nav-link grid min-h-12 place-items-center rounded-md text-[0.68rem] font-bold text-[var(--muted)]">
+            <Link
+              key={href}
+              href={demo ? `/demo?view=${targetDemoView}` : href}
+              aria-current={active ? "page" : undefined}
+              aria-busy={pending || undefined}
+              data-navigation-pending={pending ? "true" : undefined}
+              onClick={(event) => handleNavigation(event, href, targetDemoView, label)}
+              className="mobile-nav-link grid min-h-12 place-items-center rounded-md text-[0.68rem] font-bold text-[var(--muted)]"
+            >
               <NavContent icon={icon} label={label} mobile />
             </Link>
           );
         })}
       </nav>
+
+      <NavigationRipple state={ripple} />
+      <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {ripple && !ripple.contentCommitted
+          ? ripple.phase === "stalled" ? `Still opening ${ripple.label}.` : `Opening ${ripple.label}.`
+          : ""}
+      </p>
     </div>
   );
 }
