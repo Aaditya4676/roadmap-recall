@@ -1,4 +1,4 @@
-import { CalendarClock, Layers3 } from "lucide-react";
+import { Brain, CalendarClock, Layers3 } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AiNotePanel } from "@/components/ai-note-panel";
@@ -17,7 +17,12 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
   const isPersonal = topic.breadcrumb === "Personal topics";
   return (
     <div className="mx-auto max-w-4xl">
-      <Link href="/app/library" className="button-ghost mb-5 !px-0">← Back to Library</Link>
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <Link href="/app/library" className="button-ghost !px-0">← Back to Library</Link>
+        <Link href={`/app/review?topic=${topic.id}`} className="button-primary">
+          <Brain size={17} /> Review now
+        </Link>
+      </div>
       <div className="page-heading mb-8">
         <p className="context-label">{isPersonal ? "Personal topic" : topic.part === "frontend" ? "Primary plan" : "Extension plan"}</p>
         <h1 className="mt-2 text-balance text-3xl font-bold tracking-[-0.035em] sm:text-4xl">{topic.title}</h1>

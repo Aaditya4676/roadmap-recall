@@ -4,6 +4,7 @@ import { CheckCircle2, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { FocusTextarea } from "@/components/focus-textarea";
 import { Markdown } from "@/components/markdown";
 import type { RecallQuestion, ReviewRating, ReviewState, StudyTopic } from "@/lib/domain/types";
 import {
@@ -12,6 +13,8 @@ import {
   readRecallAnswerSnapshots,
   readyRecallQuestions,
 } from "@/lib/recall";
+
+const MAX_SCRATCHPAD_CHARS = 20_000;
 
 type ReviewResponse = {
   reviewState?: ReviewState;
@@ -59,18 +62,17 @@ function QuestionRecall({
             : undefined;
           return (
             <li className="py-5" key={item.id}>
-              <label className="grid gap-2 font-semibold">
-                <span>{index + 1}. {item.question}</span>
-                <textarea
-                  autoFocus={index === 0}
-                  className="field min-h-28 resize-y font-normal"
-                  maxLength={MAX_RECALL_ANSWER_CHARS}
-                  readOnly={revealed}
-                  value={answers[item.id] ?? ""}
-                  onChange={(event) => onAnswer(item.id, event.target.value)}
-                  placeholder="Explain it without opening your notes…"
-                />
-              </label>
+              <FocusTextarea
+                label={<span>{index + 1}. {item.question}</span>}
+                dialogTitle={`Question ${index + 1}: ${item.question}`}
+                autoFocus={index === 0}
+                className="min-h-32 sm:min-h-36"
+                maxLength={MAX_RECALL_ANSWER_CHARS}
+                readOnly={revealed}
+                value={answers[item.id] ?? ""}
+                onChange={(answer) => onAnswer(item.id, answer)}
+                placeholder="Explain it without opening your notes…"
+              />
               {revealed && (
                 <div className="mt-4 grid gap-4 border-l-2 border-[var(--accent)] pl-4">
                   <div>
@@ -93,7 +95,13 @@ function QuestionRecall({
   );
 }
 
-export function ReviewSession({ initialTopics }: { initialTopics: StudyTopic[] }) {
+export function ReviewSession({
+  initialTopics,
+  mode = "queue",
+}: {
+  initialTopics: StudyTopic[];
+  mode?: "queue" | "single";
+}) {
   const router = useRouter();
   const [topics, setTopics] = useState(initialTopics);
   const [index, setIndex] = useState(0);
@@ -111,6 +119,7 @@ export function ReviewSession({ initialTopics }: { initialTopics: StudyTopic[] }
   const topic = topics[index];
   const recallQuestions = topic ? readyRecallQuestions(topic.note.recallQuestions) : [];
   const usesQuestions = recallQuestions.length > 0;
+  const returnHref = mode === "single" && topics[0] ? `/app/topics/${topics[0].id}` : "/app/today";
 
   useEffect(() => () => request.current?.abort(), []);
 
@@ -119,8 +128,14 @@ export function ReviewSession({ initialTopics }: { initialTopics: StudyTopic[] }
       <div className="liquid-panel mx-auto max-w-xl rounded-[12px] p-10 text-center" data-liquid>
         <CheckCircle2 size={44} className="mx-auto text-[var(--accent)]" />
         <h1 className="mt-4 text-3xl font-bold">Review complete</h1>
-        <p className="mt-2 text-[var(--muted)]">You recalled {topics.length} {topics.length === 1 ? "topic" : "topics"}. That is enough for today.</p>
-        <Link className="button-primary mt-7" data-liquid href="/app/today" onClick={() => router.refresh()}>Return to Today</Link>
+        <p className="mt-2 text-[var(--muted)]">
+          {mode === "single"
+            ? "Your response was saved and the next review was scheduled."
+            : `You recalled ${topics.length} ${topics.length === 1 ? "topic" : "topics"}. That is enough for today.`}
+        </p>
+        <Link className="button-primary mt-7" data-liquid href={returnHref} onClick={() => router.refresh()}>
+          {mode === "single" ? "Return to topic" : "Return to Today"}
+        </Link>
       </div>
     );
   }
@@ -194,7 +209,9 @@ export function ReviewSession({ initialTopics }: { initialTopics: StudyTopic[] }
   return (
     <div className="mx-auto max-w-3xl">
       <div className="mb-5 flex items-center justify-between">
-        <Link href="/app/today" className="button-ghost">← End session</Link>
+        <Link href={returnHref} className="button-ghost">
+          {mode === "single" ? "← Back to topic" : "← End session"}
+        </Link>
         <span className="text-sm text-[var(--muted)]">{index + 1} / {topics.length}</span>
       </div>
       <div className="h-1.5 overflow-hidden rounded-sm bg-[var(--subtle)]" role="progressbar" aria-label="Review progress" aria-valuemin={0} aria-valuemax={topics.length} aria-valuenow={index}>
@@ -215,10 +232,18 @@ export function ReviewSession({ initialTopics }: { initialTopics: StudyTopic[] }
           />
         ) : (
           <>
-            <label className="mt-7 grid gap-2 font-semibold">
-              What can you explain from memory?
-              <textarea autoFocus className="field min-h-36 resize-y font-normal" value={scratchpad} onChange={(event) => setScratchpad(event.target.value)} placeholder="Use this space to reconstruct the idea…" />
-            </label>
+            <div className="mt-7">
+              <FocusTextarea
+                label="What can you explain from memory?"
+                dialogTitle={`${topic.title}: recall from memory`}
+                autoFocus
+                className="min-h-64 sm:min-h-72"
+                maxLength={MAX_SCRATCHPAD_CHARS}
+                value={scratchpad}
+                onChange={setScratchpad}
+                placeholder="Use this space to reconstruct the idea…"
+              />
+            </div>
             <label className="mt-3 flex items-start gap-2 text-sm text-[var(--muted)]">
               <input className="mt-1" type="checkbox" checked={append} onChange={(event) => setAppend(event.target.checked)} />
               Append this scratchpad to my personal note after rating

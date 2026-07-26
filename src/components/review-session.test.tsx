@@ -132,4 +132,27 @@ describe("ReviewSession structured recall", () => {
     expect(await screen.findByRole("button", { name: "Reload this session" })).toBeVisible();
     expect(screen.getByRole("alert")).toHaveTextContent("Review state changed.");
   });
+
+  it("returns a manually opened review to its topic page", async () => {
+    const user = userEvent.setup();
+    const currentTopic = topic();
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        reviewState: { ...currentTopic.reviewState, reviewCount: 2 },
+      }),
+    })));
+
+    render(<ReviewSession initialTopics={[currentTopic]} mode="single" />);
+    expect(screen.getByRole("link", { name: "← Back to topic" }))
+      .toHaveAttribute("href", `/app/topics/${currentTopic.id}`);
+
+    await user.click(screen.getByRole("button", { name: "Check my answers" }));
+    await user.click(screen.getByRole("button", { name: "good" }));
+
+    expect(await screen.findByRole("heading", { name: "Review complete" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Return to topic" }))
+      .toHaveAttribute("href", `/app/topics/${currentTopic.id}`);
+  });
 });

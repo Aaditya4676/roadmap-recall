@@ -17,6 +17,7 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { ActivityView } from "@/components/activity-view";
+import { FocusTextarea } from "@/components/focus-textarea";
 import { Markdown } from "@/components/markdown";
 import { PageHeading } from "@/components/page-heading";
 import { RecallQuestionFields } from "@/components/recall-question-fields";
@@ -35,6 +36,7 @@ import { createReviewState, scheduleReview } from "@/lib/scheduler";
 
 const STORAGE_KEY = "roadmap-recall-demo-v2";
 const LEGACY_STORAGE_KEY = "roadmap-recall-demo-v1";
+const MAX_DEMO_SCRATCHPAD_CHARS = 20_000;
 
 function normalizeStoredTopic(value: StudyTopic): StudyTopic {
   return {
@@ -60,7 +62,9 @@ function longDate(day: string): string {
 
 function Modal({ children, label, onClose }: { children: React.ReactNode; label: string; onClose: () => void }) {
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => event.key === "Escape" && onClose();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !document.querySelector("dialog[open]")) onClose();
+    };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
@@ -248,7 +252,115 @@ function ReviewModal({ topics, onClose, onUpdate }: { topics: StudyTopic[]; onCl
     onUpdate({ ...topic, reviewState });
     setIndex((value) => value + 1); setRevealed(false); setAiRevealed(false); setScratch(""); setAnswers({});
   }
-  return <Modal label={`Review ${topic.title}`} onClose={onClose}><div className="flex items-center justify-between gap-4"><p className="context-label">Topic {index + 1} of {due.length}</p><span className="text-xs text-[var(--muted)]">Recall before revealing</span></div><h2 className="mt-2 text-balance text-3xl font-bold">{topic.title}</h2><p className="mt-1 text-sm text-[var(--muted)]">{topic.breadcrumb}</p>{recallQuestions.length ? <ol className="mt-6 divide-y divide-[var(--border)] border-y border-[var(--border)]">{recallQuestions.map((item, questionIndex) => { const candidate = previousById.get(item.id); const previous = candidate?.question === item.question && candidate.idealAnswer === item.idealAnswer ? candidate : undefined; return <li className="py-5" key={item.id}><label className="grid gap-2 font-semibold"><span>{questionIndex + 1}. {item.question}</span><textarea autoFocus={questionIndex === 0} readOnly={revealed} maxLength={MAX_RECALL_ANSWER_CHARS} className="field min-h-28 resize-y font-normal" value={answers[item.id] ?? ""} onChange={(event) => setAnswers((current) => ({ ...current, [item.id]: event.target.value }))} placeholder="Answer from memory…" /></label>{revealed && <div className="mt-4 grid gap-4 border-l-2 border-[var(--accent)] pl-4"><div><p className="mb-1 text-xs font-bold text-[var(--muted)]">Ideal answer</p><Markdown>{item.idealAnswer}</Markdown></div>{previous && <div><p className="mb-1 text-xs font-bold text-[var(--muted)]">Previous attempt</p><p className="whitespace-pre-wrap text-sm">{previous.answer || "No answer was entered."}</p></div>}</div>}</li>; })}</ol> : <label className="mt-6 grid gap-2 font-semibold">What can you explain from memory?<textarea autoFocus className="field min-h-32 resize-y font-normal" value={scratch} onChange={(e) => setScratch(e.target.value)} placeholder="Private scratchpad for this review…" /></label>}{!revealed ? <button className="button-primary mt-5 w-full" data-liquid onClick={() => setRevealed(true)}>{recallQuestions.length ? "Check my answers" : "Reveal my notes"}</button> : <>{recallQuestions.length ? <details className="mt-5 border-y border-[var(--border)] py-4"><summary className="cursor-pointer font-semibold text-[var(--muted)]">Open full reference note</summary><div className="reading-plane mt-4 p-5"><Markdown>{topic.note.markdown || "_No notes yet._"}</Markdown></div></details> : <div className="reading-plane mt-5 p-5"><p className="context-label mb-3">My notes</p><Markdown>{topic.note.markdown || "_No notes yet._"}</Markdown></div>}{topic.aiNote && !topic.aiNote.hidden && (!aiRevealed ? <button className="button-secondary mt-3 w-full" data-liquid onClick={() => setAiRevealed(true)}><Sparkles size={17} /> Reveal separate AI notes</button> : <div className="ai-plane mt-3 p-5"><p className="context-label mb-3">AI notes · {topic.aiNote.model}</p><p>{topic.aiNote.document.summary}</p><ul className="mt-3 list-disc pl-5">{topic.aiNote.document.keyPoints.map((point) => <li key={point}>{point}</li>)}</ul></div>)}<p className="mb-2 mt-6 text-center text-sm font-semibold">How well did you recall it?</p><div className="grid grid-cols-3 gap-2">{(["again", "hard", "good"] as const).map((rating) => <button key={rating} data-liquid className={rating === "good" ? "button-primary !px-2 capitalize" : "button-secondary !px-2 capitalize"} onClick={() => rate(rating)}>{rating}</button>)}</div></>}</Modal>;
+  return (
+    <Modal label={`Review ${topic.title}`} onClose={onClose}>
+      <div className="flex items-center justify-between gap-4">
+        <p className="context-label">Topic {index + 1} of {due.length}</p>
+        <span className="text-xs text-[var(--muted)]">Recall before revealing</span>
+      </div>
+      <h2 className="mt-2 text-balance text-3xl font-bold">{topic.title}</h2>
+      <p className="mt-1 text-sm text-[var(--muted)]">{topic.breadcrumb}</p>
+
+      {recallQuestions.length ? (
+        <ol className="mt-6 divide-y divide-[var(--border)] border-y border-[var(--border)]">
+          {recallQuestions.map((item, questionIndex) => {
+            const candidate = previousById.get(item.id);
+            const previous = candidate?.question === item.question && candidate.idealAnswer === item.idealAnswer
+              ? candidate
+              : undefined;
+            return (
+              <li className="py-5" key={item.id}>
+                <FocusTextarea
+                  label={<span>{questionIndex + 1}. {item.question}</span>}
+                  dialogTitle={`Question ${questionIndex + 1}: ${item.question}`}
+                  autoFocus={questionIndex === 0}
+                  readOnly={revealed}
+                  maxLength={MAX_RECALL_ANSWER_CHARS}
+                  className="min-h-32 sm:min-h-36"
+                  value={answers[item.id] ?? ""}
+                  onChange={(answer) => setAnswers((current) => ({ ...current, [item.id]: answer }))}
+                  placeholder="Answer from memory…"
+                />
+                {revealed && (
+                  <div className="mt-4 grid gap-4 border-l-2 border-[var(--accent)] pl-4">
+                    <div>
+                      <p className="mb-1 text-xs font-bold text-[var(--muted)]">Ideal answer</p>
+                      <Markdown>{item.idealAnswer}</Markdown>
+                    </div>
+                    {previous && (
+                      <div>
+                        <p className="mb-1 text-xs font-bold text-[var(--muted)]">Previous attempt</p>
+                        <p className="whitespace-pre-wrap text-sm">{previous.answer || "No answer was entered."}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ol>
+      ) : (
+        <div className="mt-6">
+          <FocusTextarea
+            label="What can you explain from memory?"
+            dialogTitle={`${topic.title}: recall from memory`}
+            autoFocus
+            maxLength={MAX_DEMO_SCRATCHPAD_CHARS}
+            className="min-h-56 sm:min-h-64"
+            value={scratch}
+            onChange={setScratch}
+            placeholder="Private scratchpad for this review…"
+          />
+        </div>
+      )}
+
+      {!revealed ? (
+        <button className="button-primary mt-5 w-full" data-liquid onClick={() => setRevealed(true)}>
+          {recallQuestions.length ? "Check my answers" : "Reveal my notes"}
+        </button>
+      ) : (
+        <>
+          {recallQuestions.length ? (
+            <details className="mt-5 border-y border-[var(--border)] py-4">
+              <summary className="cursor-pointer font-semibold text-[var(--muted)]">Open full reference note</summary>
+              <div className="reading-plane mt-4 p-5"><Markdown>{topic.note.markdown || "_No notes yet._"}</Markdown></div>
+            </details>
+          ) : (
+            <div className="reading-plane mt-5 p-5">
+              <p className="context-label mb-3">My notes</p>
+              <Markdown>{topic.note.markdown || "_No notes yet._"}</Markdown>
+            </div>
+          )}
+          {topic.aiNote && !topic.aiNote.hidden && (
+            !aiRevealed ? (
+              <button className="button-secondary mt-3 w-full" data-liquid onClick={() => setAiRevealed(true)}>
+                <Sparkles size={17} /> Reveal separate AI notes
+              </button>
+            ) : (
+              <div className="ai-plane mt-3 p-5">
+                <p className="context-label mb-3">AI notes · {topic.aiNote.model}</p>
+                <p>{topic.aiNote.document.summary}</p>
+                <ul className="mt-3 list-disc pl-5">{topic.aiNote.document.keyPoints.map((point) => <li key={point}>{point}</li>)}</ul>
+              </div>
+            )
+          )}
+          <p className="mb-2 mt-6 text-center text-sm font-semibold">How well did you recall it?</p>
+          <div className="grid grid-cols-3 gap-2">
+            {(["again", "hard", "good"] as const).map((rating) => (
+              <button
+                key={rating}
+                data-liquid
+                className={rating === "good" ? "button-primary !px-2 capitalize" : "button-secondary !px-2 capitalize"}
+                onClick={() => rate(rating)}
+              >
+                {rating}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </Modal>
+  );
 }
 
 function TopicModal({ topic, onClose, onUpdate }: { topic: StudyTopic; onClose: () => void; onUpdate: (topic: StudyTopic) => void }) {

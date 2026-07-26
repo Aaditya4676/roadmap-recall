@@ -111,3 +111,25 @@ test("question-led review hides references and keeps the latest answer", async (
   await expect(topic.getByText("The effort makes the memory path easier to find.")).toBeVisible();
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });
+
+test("recall answers expand into a synchronized full-screen editor", async ({ page }) => {
+  await page.goto("/demo");
+  await page.getByRole("button", { name: /Start review/i }).click();
+  const review = page.getByRole("dialog", { name: "Review Active recall" });
+  await review.getByRole("button", { name: /Expand Question 1:/i }).click();
+
+  const focused = page.getByRole("dialog", { name: /Question 1:/i });
+  await expect(focused).toBeVisible();
+  const viewport = page.viewportSize();
+  const box = await focused.boundingBox();
+  expect(box?.width).toBeGreaterThanOrEqual((viewport?.width ?? 0) * 0.98);
+  expect(box?.height).toBeGreaterThanOrEqual((viewport?.height ?? 0) * 0.98);
+
+  await focused.getByRole("textbox", { name: /Question 1:/i }).fill("Retrieval strengthens the path to the memory.");
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await page.keyboard.press("Escape");
+
+  await expect(focused).toBeHidden();
+  await expect(review.getByRole("textbox", { name: /Why is attempting retrieval useful/i }))
+    .toHaveValue("Retrieval strengthens the path to the memory.");
+});

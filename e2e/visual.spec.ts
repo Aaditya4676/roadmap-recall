@@ -53,6 +53,16 @@ test.describe("light theme visual regression", () => {
     await expect(dialog).toBeVisible();
     await expect(dialog).toHaveScreenshot("structured-recall-light.png", screenshotOptions);
   });
+
+  test("focused recall editor", async ({ page }) => {
+    await page.goto("/demo");
+    await page.getByRole("button", { name: /Start review/i }).click();
+    const review = page.getByRole("dialog", { name: "Review Active recall" });
+    await review.getByRole("button", { name: /Expand Question 1:/i }).click();
+    const focused = page.getByRole("dialog", { name: /Question 1:/i });
+    await expect(focused).toBeVisible();
+    await expect(focused).toHaveScreenshot("focused-recall-light.png", screenshotOptions);
+  });
 });
 
 test.describe("dark theme visual regression", () => {
