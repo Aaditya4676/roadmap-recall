@@ -15,6 +15,38 @@ test("landing page leads to an isolated, accessible demo", async ({ page }) => {
   expect(results.violations).toEqual([]);
 });
 
+test("theme change radiates from the toggle and persists", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("roadmap-recall-theme", "light");
+  });
+  await page.goto("/demo");
+
+  const root = page.locator("html");
+  const toggle = page.getByRole("button", { name: "Toggle color theme" });
+  await expect(root).toHaveAttribute("data-theme", "light");
+  await toggle.scrollIntoViewIfNeeded();
+  const bounds = await toggle.boundingBox();
+
+  await toggle.click();
+
+  await expect(root).toHaveAttribute("data-theme", "dark");
+  await expect(root).toHaveClass(/theme-transition-active/);
+  const transition = await root.evaluate((element) => {
+    const style = (element as HTMLElement).style;
+    return {
+      x: Number.parseFloat(style.getPropertyValue("--theme-transition-x")),
+      y: Number.parseFloat(style.getPropertyValue("--theme-transition-y")),
+      radius: Number.parseFloat(style.getPropertyValue("--theme-transition-radius")),
+    };
+  });
+
+  expect(transition.x).toBeCloseTo((bounds?.x ?? 0) + (bounds?.width ?? 0) / 2, 0);
+  expect(transition.y).toBeCloseTo((bounds?.y ?? 0) + (bounds?.height ?? 0) / 2, 0);
+  expect(transition.radius).toBeGreaterThan(500);
+  await expect(root).not.toHaveClass(/theme-transition-active/);
+  expect(await page.evaluate(() => localStorage.getItem("roadmap-recall-theme"))).toBe("dark");
+});
+
 test("quick capture schedules a local topic without a network write", async ({ page }) => {
   await page.goto("/demo");
   await page.getByRole("button", { name: /Add what I learned/i }).click();

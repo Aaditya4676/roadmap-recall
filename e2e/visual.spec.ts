@@ -26,6 +26,37 @@ test.describe("light theme visual regression", () => {
     await expect(page).toHaveScreenshot("today-light.png", { ...screenshotOptions, fullPage: true });
   });
 
+  test("theme reveal midpoint", async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem("roadmap-recall-theme", "light");
+    });
+    await page.goto("/demo");
+    const toggle = page.getByRole("button", { name: "Toggle color theme" });
+    await toggle.scrollIntoViewIfNeeded();
+    await toggle.click();
+    await expect(page.locator("html")).toHaveClass(/theme-transition-active/);
+    await expect.poll(() => page.evaluate(() => document.getAnimations().some((animation) => {
+      const effect = animation.effect as KeyframeEffect | null;
+      return effect?.pseudoElement?.includes("view-transition-new(root)");
+    }))).toBe(true);
+    await page.evaluate(async () => {
+      const reveal = document.getAnimations().find((animation) => {
+        const effect = animation.effect as KeyframeEffect | null;
+        return effect?.pseudoElement?.includes("view-transition-new(root)");
+      });
+
+      if (!reveal) throw new Error("Theme reveal animation was not created");
+      reveal.pause();
+      reveal.currentTime = 380;
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    });
+
+    await expect(page).toHaveScreenshot("theme-reveal-midpoint-light-to-dark.png", {
+      ...screenshotOptions,
+      animations: "allow",
+    });
+  });
+
   test("activity surface", async ({ page }) => {
     await page.goto("/demo?view=activity");
     await expect(page.getByRole("heading", { name: "Activity", exact: true })).toBeVisible();
