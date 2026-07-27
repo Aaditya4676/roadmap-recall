@@ -15,6 +15,7 @@ The public `/demo` is a real localStorage sandbox. The private `/app/*` workspac
 - First-class recall Q&A: paste `Q:` / `A:` pairs, answer each prompt before reveal, compare with the ideal and previous answer, and keep every attempt as immutable review history while the topic exposes the newest attempt.
 - FSRS (90% desired retention, one-year cap) and a transparent fixed 1d → 7d → 30d → maintenance scheduler.
 - Active-recall review flow with question-led retrieval when Q&A exists, an open-ended fallback for older notes, hidden references, separate AI reveal, and rating.
+- Optional AI recall judge for structured Q&A: Gemini or Z.AI compares each attempt with its authored ideal answer, scores retained information, and suggests an FSRS rating while manual rating remains available.
 - A forgiving Activity calendar with rolling 7/30-day rhythm, stronger due-review days, and truthful recovery marks for overdue reviews completed later.
 - Explicit replay-based scheduler migration with an audit event.
 - Optional Gemini and Z.AI generation with structured output, one schema-repair retry, visible provider errors, and no silent fallback.
@@ -39,9 +40,9 @@ Open `http://localhost:3000/demo`; no credentials are required.
 For the private workspace:
 
 1. Create a Supabase project.
-2. Copy `.env.example` to `.env.local` and fill the public Supabase URL/key, service-role key, `OWNER_EMAIL`, and `APP_URL`.
+2. Copy `.env.example` to `.env.local` and fill the public Supabase URL/key, service-role key, `OWNER_EMAIL`, and `APP_URL`. `OWNER_EMAIL` identifies the unlimited owner account and the private Custom GPT target.
 3. Apply every SQL file in `supabase/migrations` in numeric order (or use the Supabase CLI).
-4. In Supabase Auth, create and confirm exactly one user with the same address as `OWNER_EMAIL`, then disable open public signup.
+4. In Supabase Auth, create and confirm the user with the same address as `OWNER_EMAIL`. You may pre-create additional member accounts; the login form never creates users. Keep open public signup disabled.
 5. Set the Auth Site URL/redirect URL and configure Resend as custom SMTP. Supabase’s demo SMTP is not suitable for this app.
 6. Sign in once with that owner email, then preview and apply the roadmap:
 
@@ -52,11 +53,17 @@ npm run roadmap:import
 
 The preview must report exactly 795 / 613 / 182. Apply aborts on ambiguity and never deletes activated study state.
 
-Migration `0007_structured_recall.sql` adds the authored question set, latest-answer state, and immutable per-review answer snapshots. Apply it before deploying a build that contains structured recall.
+Migration `0007_structured_recall.sql` adds the authored question set, latest-answer state, and immutable per-review answer snapshots. Migration `0008_ai_recall_judgments.sql` adds one-time AI assessments and the transactional scheduler-replay functions. Apply both before deploying a build that contains AI recall judging.
 
 ## AI configuration
 
 Set `GEMINI_API_KEY` (default provider) and/or `ZAI_API_KEY`. Selection is explicit; one provider never silently falls back to another. API keys remain server-only. Before including a personal note, the UI shows the exact opt-in checkbox and an unpaid-Gemini content warning.
+
+The review judge is opt-in per attempt. For Z.AI, set `ZAI_API_KEY` and optionally `ZAI_MODEL=glm-5.2`; for Gemini, set `GEMINI_API_KEY` and optionally `GEMINI_MODEL`. After revealing structured recall answers, choose a provider and select **Judge my answers**. The full question set is sent in one request, but each answer is graded independently. The app derives the final Again/Hard/Good/Easy recommendation from the validated 0-4 scores, and you confirm it before FSRS is updated. If the provider is unavailable, the existing manual rating buttons continue to work.
+
+Structured attempts that were submitted without AI judgment appear under **Activity → Completed reviews**. Each can be judged once from its immutable answer snapshot. Applying that judgment preserves the original manual rating for audit, replaces the effective event rating, and replays the topic's complete review history so its current FSRS state and next due date reflect the new evidence.
+
+Non-owner accounts can make five AI review-judgment calls in a rolling 24-hour window. The quota is claimed atomically before a provider request and failed calls remain counted because upstream inference may still incur cost. Deleting a topic does not erase this cost ledger. The account identified by `OWNER_EMAIL` is unlimited. Settings shows the signed-in email, auth provider, user ID, owner/member role, and current usage.
 
 For a private Custom GPT Action:
 

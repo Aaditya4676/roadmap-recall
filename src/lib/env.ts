@@ -13,7 +13,7 @@ const schema = z.object({
   GEMINI_API_KEY: z.string().optional(),
   GEMINI_MODEL: z.string().default("gemini-2.5-flash"),
   ZAI_API_KEY: z.string().optional(),
-  ZAI_MODEL: z.string().default("glm-4.5-flash"),
+  ZAI_MODEL: z.string().default("glm-5.2"),
   ZAI_API_BASE: z.string().url().default("https://api.z.ai/api/paas/v4"),
   RESEND_API_KEY: z.string().optional(),
   RESEND_FROM: z.string().optional(),

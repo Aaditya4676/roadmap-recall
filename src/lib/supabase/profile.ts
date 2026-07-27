@@ -6,6 +6,7 @@ export interface ProfileIdentity {
   id: string;
   email?: string;
   user_metadata?: Record<string, unknown>;
+  app_metadata?: Record<string, unknown>;
 }
 
 function profileName(user: ProfileIdentity): string {

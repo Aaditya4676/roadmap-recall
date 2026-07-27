@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, LogOut, Save } from "lucide-react";
+import { Download, LogOut, Save, ShieldCheck, UserRound } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
@@ -11,6 +11,41 @@ interface Settings {
   default_keep_warm_days: 14 | 30 | 60 | null;
   reminder_enabled: boolean;
   ai_action_share_personal_notes: boolean;
+}
+
+export interface AccountSummary {
+  id: string;
+  email: string;
+  displayName: string;
+  authProvider: string;
+  isOwner: boolean;
+  aiJudgmentsUsedToday: number;
+  aiJudgmentDailyLimit: number;
+}
+
+export function AccountPanel({ account }: { account: AccountSummary }) {
+  const remaining = Math.max(0, account.aiJudgmentDailyLimit - account.aiJudgmentsUsedToday);
+  return (
+    <section className="content-surface mb-6 p-5 sm:p-6" aria-labelledby="account-heading">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex min-w-0 items-start gap-3">
+          {account.isOwner ? <ShieldCheck className="mt-0.5 shrink-0 text-[var(--accent)]" size={21} /> : <UserRound className="mt-0.5 shrink-0 text-[var(--muted)]" size={21} />}
+          <div className="min-w-0">
+            <h2 id="account-heading" className="font-bold">{account.displayName}</h2>
+            <p className="break-all text-sm text-[var(--muted)]">{account.email}</p>
+          </div>
+        </div>
+        <span className="rounded-md border border-[var(--border)] px-2.5 py-1 text-xs font-semibold">
+          {account.isOwner ? "Owner account" : "Member account"}
+        </span>
+      </div>
+      <dl className="mt-5 grid gap-3 border-t border-[var(--border)] pt-4 text-sm sm:grid-cols-3">
+        <div><dt className="text-[var(--muted)]">Signed in with</dt><dd className="mt-0.5 font-medium capitalize">{account.authProvider}</dd></div>
+        <div><dt className="text-[var(--muted)]">User ID</dt><dd className="mt-0.5 break-all font-mono text-xs">{account.id}</dd></div>
+        <div><dt className="text-[var(--muted)]">AI review judgments</dt><dd className="mt-0.5 font-medium">{account.isOwner ? "Unlimited for owner" : `${remaining} of ${account.aiJudgmentDailyLimit} remaining in 24 hours`}</dd></div>
+      </dl>
+    </section>
+  );
 }
 
 export function SettingsForm({ initial }: { initial: Settings }) {

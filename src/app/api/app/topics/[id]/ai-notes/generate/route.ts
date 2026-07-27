@@ -24,7 +24,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const questionText = recallQuestionsMarkdown(readRecallQuestions(personal.recall_questions));
     const personalContext = [personal.markdown, questionText].filter(Boolean).join("\n\n");
     const requestChars = topic.title.length + topic.breadcrumb.length + (body.includePersonalNotes ? personalContext.length : 0);
-    const model = body.provider === "gemini" ? process.env.GEMINI_MODEL ?? "gemini-2.5-flash" : process.env.ZAI_MODEL ?? "glm-4.5-flash";
+    const model = body.provider === "gemini" ? process.env.GEMINI_MODEL ?? "gemini-2.5-flash" : process.env.ZAI_MODEL ?? "glm-5.2";
     const { data: attempt, error: attemptError } = await db.from("ai_generation_attempts").insert({ owner_id: user.id, topic_id: id, provider: body.provider, model, status: "started", source_note_revision: personal.revision, request_chars: requestChars }).select("id").single();
     if (attemptError) throw attemptError;
     attemptId = attempt.id;

@@ -104,6 +104,66 @@ describe("ReviewSession structured recall", () => {
     expect(rating).toBeDisabled();
   });
 
+  it("uses a validated AI recommendation while keeping manual ratings available", async () => {
+    const user = userEvent.setup();
+    const currentTopic = topic();
+    const requests: Array<{ input: string; body: Record<string, unknown> }> = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      requests.push({ input: String(input), body: JSON.parse(String(init?.body)) as Record<string, unknown> });
+      if (String(input).endsWith("/review/judge")) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            assessment: {
+              retainedPercent: 75,
+              recommendedRating: "good",
+              provider: "zai",
+              model: "glm-5.2",
+              summary: "The core behavior was retained.",
+              results: [{ questionId: question.id, score: 3, feedback: "The answer kept the essential distinction." }],
+            },
+          }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ reviewState: { ...currentTopic.reviewState, reviewCount: 2 } }),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ReviewSession initialTopics={[currentTopic]} />);
+    await user.type(screen.getByRole("textbox", { name: /What does aria-invalid do/i }), "It communicates invalid state.");
+    await user.click(screen.getByRole("button", { name: "Check my answers" }));
+
+    expect(screen.getByRole("button", { name: "good" })).toBeVisible();
+    await user.click(screen.getByRole("checkbox", { name: /Send these questions, ideal answers/i }));
+    await user.click(screen.getByRole("button", { name: "Judge my answers" }));
+    expect(await screen.findByText("75% retained / good")).toBeVisible();
+    expect(requests[0]).toMatchObject({
+      input: `/api/app/topics/${currentTopic.id}/review/judge`,
+      body: {
+        provider: "zai",
+        consent: true,
+        expectedNoteRevision: 2,
+        answers: [{ questionId: question.id, answer: "It communicates invalid state." }],
+      },
+    });
+
+    await user.click(screen.getByRole("button", { name: "Use good rating" }));
+    expect(requests[1].body).toMatchObject({
+      rating: "good",
+      aiAssessment: {
+        retainedPercent: 75,
+        recommendedRating: "good",
+        provider: "zai",
+        model: "glm-5.2",
+      },
+    });
+  });
+
   it("surfaces validation details and offers recovery for stale sessions", async () => {
     const user = userEvent.setup();
     const fetchMock = vi

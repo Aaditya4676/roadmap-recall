@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { FocusTextarea } from "@/components/focus-textarea";
 import { Markdown } from "@/components/markdown";
+import type { RecallAssessment } from "@/lib/ai/recall-judge-schema";
 import type { RecallQuestion, ReviewRating, ReviewState, StudyTopic } from "@/lib/domain/types";
 import {
   MAX_RECALL_ANSWER_CHARS,
@@ -22,6 +23,11 @@ type ReviewResponse = {
     message?: string;
     issues?: Array<{ message?: string }>;
   };
+};
+
+type JudgeResponse = {
+  assessment?: RecallAssessment;
+  error?: ReviewResponse["error"];
 };
 
 function responseErrorMessage(data: ReviewResponse, fallback: string): string {
@@ -110,18 +116,27 @@ export function ReviewSession({
   const [append, setAppend] = useState(false);
   const [revealed, setRevealed] = useState(false);
   const [aiRevealed, setAiRevealed] = useState(false);
+  const [judgeProvider, setJudgeProvider] = useState<"zai" | "gemini">("zai");
+  const [judgeConsent, setJudgeConsent] = useState(false);
+  const [judging, setJudging] = useState(false);
+  const [assessment, setAssessment] = useState<RecallAssessment | null>(null);
+  const [judgeError, setJudgeError] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [answerError, setAnswerError] = useState("");
   const [conflict, setConflict] = useState(false);
   const inFlight = useRef(false);
   const request = useRef<AbortController | null>(null);
+  const judgeRequest = useRef<AbortController | null>(null);
   const topic = topics[index];
   const recallQuestions = topic ? readyRecallQuestions(topic.note.recallQuestions) : [];
   const usesQuestions = recallQuestions.length > 0;
   const returnHref = mode === "single" && topics[0] ? `/app/topics/${topics[0].id}` : "/app/today";
 
-  useEffect(() => () => request.current?.abort(), []);
+  useEffect(() => () => {
+    request.current?.abort();
+    judgeRequest.current?.abort();
+  }, []);
 
   if (!topic) {
     return (
@@ -150,10 +165,49 @@ export function ReviewSession({
       return;
     }
     setAnswerError("");
+    setAssessment(null);
+    setJudgeError("");
     setAnswers((current) => ({ ...current, [id]: answer }));
   }
 
-  async function rate(rating: ReviewRating) {
+  async function judgeAnswers() {
+    if (judging || !topic || !usesQuestions) return;
+    setJudging(true);
+    setJudgeError("");
+    setAssessment(null);
+    const controller = new AbortController();
+    judgeRequest.current = controller;
+    try {
+      const response = await fetch(`/api/app/topics/${topic.id}/review/judge`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({
+          provider: judgeProvider,
+          consent: true,
+          expectedNoteRevision: topic.note.revision,
+          answers: recallQuestions.map((item) => ({ questionId: item.id, answer: answers[item.id] ?? "" })),
+        }),
+      });
+      const data = await response.json() as JudgeResponse;
+      if (!response.ok || !data.assessment) {
+        setJudgeError(responseErrorMessage(data, "The AI judge could not assess these answers."));
+        return;
+      }
+      setAssessment(data.assessment);
+    } catch (requestError) {
+      if (!controller.signal.aborted) {
+        setJudgeError(requestError instanceof Error && requestError.message
+          ? requestError.message
+          : "The AI judge could not assess these answers. You can still rate manually.");
+      }
+    } finally {
+      if (judgeRequest.current === controller) judgeRequest.current = null;
+      if (!controller.signal.aborted) setJudging(false);
+    }
+  }
+
+  async function rate(rating: ReviewRating, aiAssessment: RecallAssessment | null = null) {
     if (inFlight.current) return;
     inFlight.current = true;
     setSaving(true);
@@ -172,6 +226,7 @@ export function ReviewSession({
           scratchpad: usesQuestions ? "" : scratchpad,
           appendScratchpad: usesQuestions ? false : append,
           recallAnswers: recallQuestions.map((item) => ({ questionId: item.id, answer: answers[item.id] ?? "" })),
+          aiAssessment,
         }),
       });
       const data = await response.json() as ReviewResponse;
@@ -192,6 +247,9 @@ export function ReviewSession({
       setAppend(false);
       setRevealed(false);
       setAiRevealed(false);
+      setAssessment(null);
+      setJudgeError("");
+      setJudgeConsent(false);
       setAnswerError("");
     } catch (requestError) {
       if (!controller.signal.aborted) {
@@ -285,10 +343,66 @@ export function ReviewSession({
             {usesQuestions && recallQuestions.some((item) => !(answers[item.id] ?? "").trim()) && (
               <p className="mt-5 text-center text-sm text-[var(--warning)]">Some answers were blank. That is useful feedback—consider Again if you could not retrieve them.</p>
             )}
-            <p className="mb-2 mt-7 text-center text-sm font-bold">How well did you recall it?</p>
+            {usesQuestions && (
+              <section className="mt-6 border-y border-[var(--border)] py-5" aria-labelledby="ai-judge-heading">
+                <h2 id="ai-judge-heading" className="font-bold">Optional AI judgment</h2>
+                <p className="mt-1 text-sm text-[var(--muted)]">
+                  Compare every answer in one provider request for a suggested rating. You can ignore it and rate manually.
+                </p>
+                <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                  <select
+                    aria-label="AI judge provider"
+                    className="field sm:max-w-44"
+                    disabled={judging}
+                    value={judgeProvider}
+                    onChange={(event) => {
+                      setJudgeProvider(event.target.value as "zai" | "gemini");
+                      setJudgeConsent(false);
+                    }}
+                  >
+                    <option value="zai">Z.AI</option>
+                    <option value="gemini">Gemini</option>
+                  </select>
+                  <button type="button" className="button-secondary" disabled={judging || saving || !judgeConsent} onClick={judgeAnswers}>
+                    <Sparkles size={17} /> {judging ? "Judging..." : assessment ? "Judge again" : "Judge my answers"}
+                  </button>
+                </div>
+                <label className="mt-3 flex items-start gap-2 text-sm text-[var(--muted)]">
+                  <input className="mt-1" type="checkbox" checked={judgeConsent} onChange={(event) => setJudgeConsent(event.target.checked)} />
+                  Send these questions, ideal answers, and my attempt to {judgeProvider === "zai" ? "Z.AI" : "Gemini"} for this judgment.
+                </label>
+                {judgeError && <p role="alert" className="mt-3 text-sm text-[var(--danger)]">{judgeError} Manual rating is still available below.</p>}
+                {assessment && (
+                  <div className="mt-4 border-l-2 border-[var(--accent)] pl-4" aria-live="polite">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <p className="font-bold">{assessment.retainedPercent}% retained / {assessment.recommendedRating}</p>
+                      <p className="text-xs text-[var(--muted)]">{assessment.provider} / {assessment.model}</p>
+                    </div>
+                    <p className="mt-1 text-sm text-[var(--muted)]">{assessment.summary}</p>
+                    <ol className="mt-3 grid gap-2 text-sm">
+                      {assessment.results.map((result, resultIndex) => (
+                        <li key={result.questionId}><strong>{resultIndex + 1}. {result.score}/4</strong> - {result.feedback}</li>
+                      ))}
+                    </ol>
+                    <button
+                      type="button"
+                      className="button-primary mt-4"
+                      disabled={saving}
+                      onClick={() => rate(
+                        topic.scheduler === "fixed" && assessment.recommendedRating === "easy" ? "good" : assessment.recommendedRating,
+                        assessment,
+                      )}
+                    >
+                      Use {topic.scheduler === "fixed" && assessment.recommendedRating === "easy" ? "good" : assessment.recommendedRating} rating
+                    </button>
+                  </div>
+                )}
+              </section>
+            )}
+            <p className="mb-2 mt-7 text-center text-sm font-bold">{assessment ? "Or choose the rating yourself" : "How well did you recall it?"}</p>
             <div className={`grid gap-2 ${topic.scheduler === "fsrs" ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3"}`}>
               {(["again", "hard", "good", ...(topic.scheduler === "fsrs" ? ["easy"] : [])] as ReviewRating[]).map((rating) => (
-                <button disabled={saving} key={rating} data-liquid className={rating === "good" ? "button-primary capitalize" : "button-secondary capitalize"} onClick={() => rate(rating)}>{rating}</button>
+                <button disabled={saving || judging} key={rating} data-liquid className={rating === "good" ? "button-primary capitalize" : "button-secondary capitalize"} onClick={() => rate(rating)}>{rating}</button>
               ))}
             </div>
             {error && <p role="alert" className="mt-4 text-center text-sm text-[var(--danger)]">{error}</p>}

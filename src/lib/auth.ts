@@ -33,9 +33,6 @@ export async function requireOwnerRequest(request: NextRequest) {
   // faster, cryptographically verified JWT claims path instead.
   const { data, error } = await db.auth.getUser();
   if (error || !data.user) throw new HttpError(401, "Sign in required.", "unauthorized");
-  if (env.OWNER_EMAIL && data.user.email?.toLowerCase() !== env.OWNER_EMAIL.toLowerCase()) {
-    throw new HttpError(403, "This deployment is restricted to its owner.", "owner_only");
-  }
   return { db, user: data.user };
 }
 

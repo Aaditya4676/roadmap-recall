@@ -32,5 +32,6 @@ export const getAuthenticatedUser = cache(async (): Promise<ProfileIdentity | nu
     id: data.claims.sub,
     email: data.claims.email,
     user_metadata: data.claims.user_metadata,
+    app_metadata: data.claims.app_metadata,
   };
 });

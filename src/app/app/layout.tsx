@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
-import { env, hasSupabaseConfig } from "@/lib/env";
+import { hasSupabaseConfig } from "@/lib/env";
 import { getAuthenticatedUser } from "@/lib/supabase/server";
 
 export default async function PrivateLayout({ children }: { children: React.ReactNode }) {
@@ -9,6 +9,5 @@ export default async function PrivateLayout({ children }: { children: React.Reac
   }
   const user = await getAuthenticatedUser();
   if (!user) redirect("/login");
-  if (env.OWNER_EMAIL && user.email?.toLowerCase() !== env.OWNER_EMAIL.toLowerCase()) redirect("/login?error=owner_only");
   return <AppShell>{children}</AppShell>;
 }

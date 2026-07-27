@@ -1,8 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { Sparkles } from "lucide-react";
+import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
+import type { RecallAssessment } from "@/lib/ai/recall-judge-schema";
 import { activityWeeks, type ActivityDay, type ActivitySummary } from "@/lib/activity";
 import { addCalendarDays, humanDate } from "@/lib/date";
+import type { ReviewRating } from "@/lib/domain/types";
+
+export interface CompletedReviewItem {
+  id: string;
+  topicId: string;
+  title: string;
+  breadcrumb: string;
+  reviewedOn: string;
+  rating: ReviewRating;
+  answerCount: number;
+  hasAiJudgment: boolean;
+  assessment: RecallAssessment | null;
+}
 
 function monthLabel(day: string): string {
   return new Intl.DateTimeFormat("en", { month: "short", timeZone: "UTC" }).format(
@@ -139,7 +155,7 @@ function CalendarGrid({
   );
 }
 
-export function ActivityView({ summary, today }: { summary: ActivitySummary; today: string }) {
+export function ActivityView({ summary, today, completedReviews = [] }: { summary: ActivitySummary; today: string; completedReviews?: CompletedReviewItem[] }) {
   const weeks = activityWeeks(summary.days);
   const [selectedDay, setSelectedDay] = useState(today);
   const selected = summary.days.find((day) => day.day === selectedDay) ?? summary.today;
@@ -183,6 +199,8 @@ export function ActivityView({ summary, today }: { summary: ActivitySummary; tod
         <Metric value={summary.reviews30} label="reviews · last 30" />
       </dl>
 
+      <CompletedReviews initialReviews={completedReviews} />
+
       <details className="mt-6 border-b border-[var(--border)] py-1">
         <summary className="cursor-pointer py-3 font-semibold">How the calendar works</summary>
         <div className="max-w-3xl pb-5 text-sm leading-6 text-[var(--muted)]">
@@ -191,5 +209,112 @@ export function ActivityView({ summary, today }: { summary: ActivitySummary; tod
         </div>
       </details>
     </>
+  );
+}
+
+function CompletedReviews({ initialReviews }: { initialReviews: CompletedReviewItem[] }) {
+  const [reviews, setReviews] = useState(initialReviews);
+  const [provider, setProvider] = useState<"zai" | "gemini">("zai");
+  const [consent, setConsent] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const request = useRef<AbortController | null>(null);
+
+  useEffect(() => () => request.current?.abort(), []);
+
+  if (!reviews.length) return null;
+
+  async function judge(review: CompletedReviewItem) {
+    if (busyId || review.hasAiJudgment) return;
+    setBusyId(review.id);
+    setError("");
+    const controller = new AbortController();
+    request.current = controller;
+    try {
+      const response = await fetch(`/api/app/review-events/${review.id}/judge`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({ provider, consent: true }),
+      });
+      const data = await response.json() as {
+        assessment?: RecallAssessment;
+        appliedRating?: ReviewRating;
+        error?: { message?: string };
+      };
+      if (!response.ok || !data.assessment || !data.appliedRating) {
+        setError(data.error?.message ?? "The completed review could not be judged.");
+        return;
+      }
+      setReviews((current) => current.map((item) => item.id === review.id ? {
+        ...item,
+        rating: data.appliedRating!,
+        hasAiJudgment: true,
+        assessment: data.assessment!,
+      } : item));
+    } catch (requestError) {
+      if (!controller.signal.aborted) {
+        setError(requestError instanceof Error && requestError.message
+          ? requestError.message
+          : "The completed review could not be judged.");
+      }
+    } finally {
+      if (request.current === controller) request.current = null;
+      if (!controller.signal.aborted) setBusyId(null);
+    }
+  }
+
+  return (
+    <section className="mt-8 border-y border-[var(--border)]" aria-labelledby="completed-reviews-heading">
+      <div className="flex flex-wrap items-start justify-between gap-4 py-5">
+        <div>
+          <h2 id="completed-reviews-heading" className="text-lg font-bold">Completed reviews</h2>
+          <p className="mt-1 max-w-2xl text-sm text-[var(--muted)]">
+            An unjudged structured attempt can be assessed once. All its answers use one API request, then the full topic history is replayed so the rating affects its current schedule.
+          </p>
+        </div>
+        <select
+          aria-label="Completed review AI provider"
+          className="field max-w-40"
+          disabled={busyId !== null}
+          value={provider}
+          onChange={(event) => {
+            setProvider(event.target.value as "zai" | "gemini");
+            setConsent(false);
+          }}
+        >
+          <option value="zai">Z.AI</option>
+          <option value="gemini">Gemini</option>
+        </select>
+      </div>
+      <label className="mb-5 flex items-start gap-2 text-sm text-[var(--muted)]">
+        <input className="mt-1" type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} />
+        Send a completed review&apos;s questions, ideal answers, and answers to {provider === "zai" ? "Z.AI" : "Gemini"} when I request a judgment.
+      </label>
+      <div className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
+        {reviews.map((review) => (
+          <article key={review.id} className="grid gap-3 py-4 sm:grid-cols-[1fr_auto] sm:items-center">
+            <div className="min-w-0">
+              <Link className="font-semibold hover:underline" href={`/app/topics/${review.topicId}`}>{review.title}</Link>
+              <p className="mt-0.5 text-xs text-[var(--muted)]">
+                {humanDate(review.reviewedOn)} / {review.answerCount} {review.answerCount === 1 ? "answer" : "answers"} / rating {review.rating}
+              </p>
+              {review.assessment && (
+                <div className="mt-2 border-l-2 border-[var(--accent)] pl-3 text-sm">
+                  <p className="font-semibold">{review.assessment.retainedPercent}% retained / {review.assessment.recommendedRating}</p>
+                  <p className="mt-0.5 text-[var(--muted)]">{review.assessment.summary}</p>
+                </div>
+              )}
+            </div>
+            {!review.hasAiJudgment && (
+              <button type="button" className="button-secondary" disabled={busyId !== null || !consent} onClick={() => judge(review)}>
+                <Sparkles size={17} /> {busyId === review.id ? "Judging and replaying..." : "Judge and update schedule"}
+              </button>
+            )}
+          </article>
+        ))}
+      </div>
+      {error && <p role="alert" className="border-t border-[var(--border)] py-3 text-sm text-[var(--danger)]">{error}</p>}
+    </section>
   );
 }

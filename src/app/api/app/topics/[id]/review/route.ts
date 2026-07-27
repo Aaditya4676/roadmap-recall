@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { errorResponse, HttpError, requireOwnerRequest } from "@/lib/auth";
+import { completeRecallAssessment, recallAssessmentSchema } from "@/lib/ai/recall-judge-schema";
 import type { ReviewState } from "@/lib/domain/types";
 import {
   buildRecallAnswerSnapshots,
@@ -30,6 +31,7 @@ const schema = z.object({
       context.addIssue({ code: "custom", message: "Recall answers are too large for one review." });
     }
   }).default([]),
+  aiAssessment: recallAssessmentSchema.nullable().default(null),
 });
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -46,6 +48,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const row = Array.isArray(topic.review_states) ? topic.review_states[0] : topic.review_states;
     const note = Array.isArray(topic.personal_notes) ? topic.personal_notes[0] : topic.personal_notes;
     if (!note) throw new HttpError(409, "This topic is missing its personal-note record.", "missing_personal_note");
+    if (!row) throw new HttpError(409, "This topic is missing its review state.", "missing_review_state");
     const current: ReviewState = {
       scheduler: row.scheduler, dueAt: row.due_at, dueOn: row.due_on,
       lastReviewedAt: row.last_reviewed_at, reviewCount: row.review_count,
@@ -59,12 +62,32 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     } catch (error) {
       throw new HttpError(409, error instanceof Error ? error.message : "Recall questions changed. Reload this review.", "recall_questions_changed");
     }
+    if (body.aiAssessment) {
+      const derived = completeRecallAssessment(
+        { results: body.aiAssessment.results, summary: body.aiAssessment.summary },
+        body.aiAssessment.provider,
+        body.aiAssessment.model,
+      );
+      const expectedRating = current.scheduler === "fixed" && derived.recommendedRating === "easy"
+        ? "good"
+        : derived.recommendedRating;
+      const answerIds = new Set(recallAnswers.map((item) => item.id));
+      const resultIds = new Set(derived.results.map((item) => item.questionId));
+      if (derived.retainedPercent !== body.aiAssessment.retainedPercent
+        || derived.recommendedRating !== body.aiAssessment.recommendedRating
+        || expectedRating !== body.rating
+        || derived.results.length !== recallAnswers.length
+        || resultIds.size !== derived.results.length
+        || derived.results.some((result) => !answerIds.has(result.questionId))) {
+        throw new HttpError(400, "The AI assessment does not match this review.", "invalid_ai_assessment");
+      }
+    }
     const reviewedAt = new Date();
     const next = {
       ...scheduleReview(current, body.rating, reviewedAt, topic.keep_warm_days, profile.time_zone),
       latestRecallAnswers: recallAnswers,
     };
-    const { error } = await db.rpc("record_topic_review_v2", {
+    const { error } = await db.rpc("record_topic_review_v3", {
       p_topic_id: id,
       p_expected_review_count: body.expectedReviewCount,
       p_rating: body.rating,
@@ -74,6 +97,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       p_scratchpad: body.scratchpad,
       p_append_scratchpad: body.appendScratchpad,
       p_recall_answers: recallAnswers,
+      p_ai_assessment: body.aiAssessment,
     });
     if (error?.code === "40001") throw new HttpError(409, "Review state changed. Reload this session.", "revision_conflict");
     if (error) throw error;
