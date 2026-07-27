@@ -19,7 +19,7 @@ export default function PrivacyPage() {
             <h2>Private workspace</h2>
             <p>Personal notes, authored recall questions, submitted recall answers, review history, settings, and AI notes are stored in the owner&apos;s Supabase project. Row-level security restricts browser access to that owner.</p>
             <h2>AI use</h2>
-            <p>AI is optional. In-app generation sends topic metadata and, only when checked for that request, personal note text plus authored recall questions and ideal answers to the selected provider. The Custom GPT Action receives that same personal learning material only if the owner enables consent in Settings. Submitted recall attempts are not included. AI endpoints can create or replace only the separate AI-note document; they have no personal-note write route.</p>
+            <p>AI is optional. In-app note generation sends topic metadata and, only when checked for that request, personal note text to the selected provider. AI grading sends authored questions, ideal answers, and submitted recall attempts only after explicit consent for that request; its score can drive the next review schedule. The Custom GPT Action receives personal learning material only if the owner enables consent in Settings. AI endpoints cannot overwrite personal notes.</p>
             <h2>Public demo</h2>
             <p>The demo stores its curated sandbox and your changes in localStorage in your browser. It does not connect to the production database.</p>
             <h2>Email and backups</h2>

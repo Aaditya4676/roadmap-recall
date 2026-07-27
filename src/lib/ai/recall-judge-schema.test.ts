@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { completeRecallAssessment, ratingFromRecallScore } from "@/lib/ai/recall-judge-schema";
+import { completeRecallAssessment, continuousGradeFromMean, ratingFromRecallScore, recallAssessmentSchema } from "@/lib/ai/recall-judge-schema";
 
 describe("recall judge scoring", () => {
   it("maps evidence scores to FSRS ratings", () => {
@@ -17,6 +17,23 @@ describe("recall judge scoring", () => {
       ],
       summary: "Partial retention.",
     }, "zai", "glm-5.2");
-    expect(assessment).toMatchObject({ retainedPercent: 63, recommendedRating: "good", provider: "zai", model: "glm-5.2" });
+    expect(assessment).toMatchObject({ meanScore: 2.5, continuousGrade: 2.5, retainedPercent: 63, recommendedRating: "good", provider: "zai", model: "glm-5.2" });
+  });
+
+  it("maps rubric means onto the continuous FSRS axis", () => {
+    expect([0, 1, 2, 2.69, 3, 4].map(continuousGradeFromMean)).toEqual([1, 1, 2, 2.69, 3, 4]);
+    expect(() => continuousGradeFromMean(Number.NaN)).toThrow();
+  });
+
+  it("normalizes legacy stored assessments from their immutable result scores", () => {
+    const assessment = recallAssessmentSchema.parse({
+      results: [{ questionId: "8acefc73-997a-4db5-a24a-afadf8799623", score: 2, feedback: "Partial." }],
+      summary: "Partial retention.",
+      retainedPercent: 50,
+      recommendedRating: "hard",
+      provider: "gemini",
+      model: "gemini-3.6-flash",
+    });
+    expect(assessment).toMatchObject({ meanScore: 2, continuousGrade: 2 });
   });
 });

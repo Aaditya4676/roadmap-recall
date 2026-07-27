@@ -23,10 +23,15 @@ export async function PATCH(request: NextRequest) {
 
     if (body.migrateExisting) {
       const topics = await getTopics(db, user.id);
-      const events = await selectAllByOwner(db, "review_events", user.id, "topic_id, reviewed_at, rating");
+      const events = await selectAllByOwner(db, "review_events", user.id, "id, topic_id, reviewed_at, rating, continuous_grade");
       const migrations = [];
       for (const topic of topics.filter((item) => item.scheduler !== body.defaultScheduler)) {
-        const history = events.filter((event) => event.topic_id === topic.id).map((event) => ({ reviewedAt: event.reviewed_at, rating: event.rating }));
+        const history = events.filter((event) => event.topic_id === topic.id).map((event) => ({
+          id: event.id,
+          reviewedAt: event.reviewed_at,
+          rating: event.rating,
+          continuousGrade: event.continuous_grade,
+        }));
         const next = replayScheduler(body.defaultScheduler, topic.learnedOn, history, topic.keepWarmDays, body.timeZone);
         migrations.push({ topicId: topic.id, expectedReviewCount: topic.reviewState.reviewCount, nextState: next });
       }

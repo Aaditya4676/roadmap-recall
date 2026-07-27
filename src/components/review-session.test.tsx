@@ -117,9 +117,11 @@ describe("ReviewSession structured recall", () => {
           json: async () => ({
             assessment: {
               retainedPercent: 75,
+              meanScore: 3,
+              continuousGrade: 3,
               recommendedRating: "good",
-              provider: "zai",
-              model: "glm-5.2",
+              provider: "gemini",
+              model: "gemini-3.6-flash",
               summary: "The core behavior was retained.",
               results: [{ questionId: question.id, score: 3, feedback: "The answer kept the essential distinction." }],
             },
@@ -134,32 +136,32 @@ describe("ReviewSession structured recall", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<ReviewSession initialTopics={[currentTopic]} />);
+    render(<ReviewSession initialTopics={[currentTopic]} configuredProviders={["gemini"]} />);
     await user.type(screen.getByRole("textbox", { name: /What does aria-invalid do/i }), "It communicates invalid state.");
     await user.click(screen.getByRole("button", { name: "Check my answers" }));
 
     expect(screen.getByRole("button", { name: "good" })).toBeVisible();
     await user.click(screen.getByRole("checkbox", { name: /Send these questions, ideal answers/i }));
-    await user.click(screen.getByRole("button", { name: "Judge my answers" }));
-    expect(await screen.findByText("75% retained / good")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Grade with Gemini" }));
+    expect(await screen.findByText("75% answer quality / FSRS grade 3.00")).toBeVisible();
     expect(requests[0]).toMatchObject({
       input: `/api/app/topics/${currentTopic.id}/review/judge`,
       body: {
-        provider: "zai",
+        provider: "gemini",
         consent: true,
         expectedNoteRevision: 2,
         answers: [{ questionId: question.id, answer: "It communicates invalid state." }],
       },
     });
 
-    await user.click(screen.getByRole("button", { name: "Use good rating" }));
+    await user.click(screen.getByRole("button", { name: "Schedule from 75% AI score" }));
     expect(requests[1].body).toMatchObject({
       rating: "good",
       aiAssessment: {
         retainedPercent: 75,
         recommendedRating: "good",
-        provider: "zai",
-        model: "glm-5.2",
+        provider: "gemini",
+        model: "gemini-3.6-flash",
       },
     });
   });

@@ -18,7 +18,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const { provider } = schema.parse(await request.json());
     const { data: event, error: eventError } = await db
       .from("review_events")
-      .select("id, topic_id, rating, recall_answers, ai_assessment")
+      .select("id, topic_id, rating, recall_answers, ai_assessment, continuous_grade")
       .eq("id", id)
       .single();
     if (eventError || !event) throw new HttpError(404, "Completed review not found.", "not_found");
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const [topicResult, profileResult, historyResult] = await Promise.all([
       db.from("study_topics").select("learned_on, keep_warm_days, review_states(*)").eq("id", event.topic_id).single(),
       db.from("profiles").select("time_zone").eq("id", user.id).single(),
-      db.from("review_events").select("id, reviewed_at, rating").eq("topic_id", event.topic_id).order("reviewed_at", { ascending: true }).order("id", { ascending: true }),
+      db.from("review_events").select("id, reviewed_at, rating, continuous_grade").eq("topic_id", event.topic_id).order("reviewed_at", { ascending: true }).order("id", { ascending: true }),
     ]);
     if (topicResult.error || !topicResult.data) throw new HttpError(404, "Topic not found.", "not_found");
     if (profileResult.error || !profileResult.data) throw profileResult.error ?? new Error("Profile not found.");
@@ -67,29 +67,30 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       ? "good"
       : assessment.recommendedRating;
     const history = (historyResult.data ?? []).map((item) => ({
+      id: item.id,
       reviewedAt: item.reviewed_at,
       rating: item.id === id ? appliedRating : item.rating,
+      continuousGrade: item.id === id ? assessment.continuousGrade : item.continuous_grade,
     }));
     if (history.length !== current.reviewCount || !historyResult.data?.some((item) => item.id === id)) {
       throw new HttpError(409, "Review history changed. Retry the AI judgment.", "revision_conflict");
     }
-    const replayed = appliedRating === event.rating
-      ? current
-      : {
-          ...replayScheduler(
-            current.scheduler,
-            topicResult.data.learned_on,
-            history,
-            topicResult.data.keep_warm_days,
-            profileResult.data.time_zone,
-          ),
-          latestRecallAnswers: current.latestRecallAnswers,
-        };
-    const { error: applyError } = await db.rpc("apply_review_ai_judgment", {
+    const replayed = {
+      ...replayScheduler(
+        current.scheduler,
+        topicResult.data.learned_on,
+        history,
+        topicResult.data.keep_warm_days,
+        profileResult.data.time_zone,
+      ),
+      latestRecallAnswers: current.latestRecallAnswers,
+    };
+    const { error: applyError } = await db.rpc("apply_review_ai_judgment_v2", {
       p_event_id: id,
       p_expected_review_count: current.reviewCount,
       p_rating: appliedRating,
       p_ai_assessment: assessment,
+      p_continuous_grade: assessment.continuousGrade,
       p_next_state: replayed,
     });
     if (applyError?.code === "40001") throw new HttpError(409, "Review history changed or this review was already judged. Refresh and try again.", "revision_conflict");

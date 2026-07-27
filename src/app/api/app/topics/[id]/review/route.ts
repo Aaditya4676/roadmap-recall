@@ -73,9 +73,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
         : derived.recommendedRating;
       const answerIds = new Set(recallAnswers.map((item) => item.id));
       const resultIds = new Set(derived.results.map((item) => item.questionId));
-      if (derived.retainedPercent !== body.aiAssessment.retainedPercent
-        || derived.recommendedRating !== body.aiAssessment.recommendedRating
-        || expectedRating !== body.rating
+      if (expectedRating !== body.rating
         || derived.results.length !== recallAnswers.length
         || resultIds.size !== derived.results.length
         || derived.results.some((result) => !answerIds.has(result.questionId))) {
@@ -84,10 +82,17 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     }
     const reviewedAt = new Date();
     const next = {
-      ...scheduleReview(current, body.rating, reviewedAt, topic.keep_warm_days, profile.time_zone),
+      ...scheduleReview(
+        current,
+        body.rating,
+        reviewedAt,
+        topic.keep_warm_days,
+        profile.time_zone,
+        body.aiAssessment?.continuousGrade,
+      ),
       latestRecallAnswers: recallAnswers,
     };
-    const { error } = await db.rpc("record_topic_review_v3", {
+    const { error } = await db.rpc("record_topic_review_v4", {
       p_topic_id: id,
       p_expected_review_count: body.expectedReviewCount,
       p_rating: body.rating,
@@ -98,6 +103,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       p_append_scratchpad: body.appendScratchpad,
       p_recall_answers: recallAnswers,
       p_ai_assessment: body.aiAssessment,
+      p_continuous_grade: body.aiAssessment?.continuousGrade ?? null,
     });
     if (error?.code === "40001") throw new HttpError(409, "Review state changed. Reload this session.", "revision_conflict");
     if (error) throw error;

@@ -104,9 +104,11 @@ function QuestionRecall({
 export function ReviewSession({
   initialTopics,
   mode = "queue",
+  configuredProviders = [],
 }: {
   initialTopics: StudyTopic[];
   mode?: "queue" | "single";
+  configuredProviders?: Array<"gemini" | "zai">;
 }) {
   const router = useRouter();
   const [topics, setTopics] = useState(initialTopics);
@@ -116,7 +118,9 @@ export function ReviewSession({
   const [append, setAppend] = useState(false);
   const [revealed, setRevealed] = useState(false);
   const [aiRevealed, setAiRevealed] = useState(false);
-  const [judgeProvider, setJudgeProvider] = useState<"zai" | "gemini">("zai");
+  const [judgeProvider, setJudgeProvider] = useState<"zai" | "gemini">(
+    configuredProviders.includes("gemini") ? "gemini" : configuredProviders[0] ?? "gemini",
+  );
   const [judgeConsent, setJudgeConsent] = useState(false);
   const [judging, setJudging] = useState(false);
   const [assessment, setAssessment] = useState<RecallAssessment | null>(null);
@@ -343,11 +347,11 @@ export function ReviewSession({
             {usesQuestions && recallQuestions.some((item) => !(answers[item.id] ?? "").trim()) && (
               <p className="mt-5 text-center text-sm text-[var(--warning)]">Some answers were blank. That is useful feedback—consider Again if you could not retrieve them.</p>
             )}
-            {usesQuestions && (
+            {usesQuestions && configuredProviders.length > 0 && (
               <section className="mt-6 border-y border-[var(--border)] py-5" aria-labelledby="ai-judge-heading">
-                <h2 id="ai-judge-heading" className="font-bold">Optional AI judgment</h2>
+                <h2 id="ai-judge-heading" className="font-bold">AI grading</h2>
                 <p className="mt-1 text-sm text-[var(--muted)]">
-                  Compare every answer in one provider request for a suggested rating. You can ignore it and rate manually.
+                  Grade every answer in one request. The percentage continuously adjusts FSRS; manual rating remains available below.
                 </p>
                 <div className="mt-4 flex flex-col gap-2 sm:flex-row">
                   <select
@@ -360,22 +364,22 @@ export function ReviewSession({
                       setJudgeConsent(false);
                     }}
                   >
-                    <option value="zai">Z.AI</option>
-                    <option value="gemini">Gemini</option>
+                    {configuredProviders.includes("gemini") && <option value="gemini">Gemini</option>}
+                    {configuredProviders.includes("zai") && <option value="zai">Z.AI</option>}
                   </select>
-                  <button type="button" className="button-secondary" disabled={judging || saving || !judgeConsent} onClick={judgeAnswers}>
-                    <Sparkles size={17} /> {judging ? "Judging..." : assessment ? "Judge again" : "Judge my answers"}
+                  <button type="button" className="button-primary" disabled={judging || saving || !judgeConsent} onClick={judgeAnswers}>
+                    <Sparkles size={17} /> {judging ? "Grading..." : assessment ? "Grade again" : `Grade with ${judgeProvider === "gemini" ? "Gemini" : "Z.AI"}`}
                   </button>
                 </div>
                 <label className="mt-3 flex items-start gap-2 text-sm text-[var(--muted)]">
                   <input className="mt-1" type="checkbox" checked={judgeConsent} onChange={(event) => setJudgeConsent(event.target.checked)} />
-                  Send these questions, ideal answers, and my attempt to {judgeProvider === "zai" ? "Z.AI" : "Gemini"} for this judgment.
+                  Send these questions, ideal answers, and my attempt to {judgeProvider === "zai" ? "Z.AI" : "Gemini"}; use its score to schedule this review.
                 </label>
                 {judgeError && <p role="alert" className="mt-3 text-sm text-[var(--danger)]">{judgeError} Manual rating is still available below.</p>}
                 {assessment && (
                   <div className="mt-4 border-l-2 border-[var(--accent)] pl-4" aria-live="polite">
                     <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <p className="font-bold">{assessment.retainedPercent}% retained / {assessment.recommendedRating}</p>
+                      <p className="font-bold">{assessment.retainedPercent}% answer quality / FSRS grade {assessment.continuousGrade.toFixed(2)}</p>
                       <p className="text-xs text-[var(--muted)]">{assessment.provider} / {assessment.model}</p>
                     </div>
                     <p className="mt-1 text-sm text-[var(--muted)]">{assessment.summary}</p>
@@ -393,7 +397,7 @@ export function ReviewSession({
                         assessment,
                       )}
                     >
-                      Use {topic.scheduler === "fixed" && assessment.recommendedRating === "easy" ? "good" : assessment.recommendedRating} rating
+                      Schedule from {assessment.retainedPercent}% AI score
                     </button>
                   </div>
                 )}

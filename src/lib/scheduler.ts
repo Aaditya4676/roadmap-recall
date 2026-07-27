@@ -1,4 +1,5 @@
-import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
+import { createEmptyCard, date_scheduler, fsrs, Rating, State, type Card, type Grade } from "ts-fsrs";
+import { LAPSE_GRADE_THRESHOLD } from "@/lib/ai/recall-judge-schema";
 import {
   addCalendarDays,
   dateKey,
@@ -97,12 +98,71 @@ function ratingToFsrs(rating: ReviewRating): Grade {
   }[rating] as Grade;
 }
 
+function assertContinuousGrade(grade: number): void {
+  if (Number.isFinite(grade) === false || grade < Rating.Again || grade > Rating.Easy) {
+    throw new RangeError("Continuous recall grade must be between 1 and 4.");
+  }
+}
+
+function scheduleFsrsCard(
+  card: Card,
+  reviewedAt: Date,
+  rating: ReviewRating,
+  continuousGrade?: number | null,
+): Card {
+  if (continuousGrade === null || continuousGrade === undefined) {
+    return fsrsScheduler.next(card, reviewedAt, ratingToFsrs(rating)).card;
+  }
+  assertContinuousGrade(continuousGrade);
+  if (Number.isInteger(continuousGrade)) {
+    return fsrsScheduler.next(card, reviewedAt, continuousGrade as Grade).card;
+  }
+
+  // ts-fsrs cannot consume fractional grades. Interpolate between its native
+  // adjacent outcomes so all four integer anchors remain exactly compatible.
+  const lowerGrade = Math.floor(continuousGrade) as Grade;
+  const upperGrade = Math.ceil(continuousGrade) as Grade;
+  const fraction = continuousGrade - lowerGrade;
+  const anchors = fsrsScheduler.repeat(card, reviewedAt);
+  const lower = anchors[lowerGrade].card;
+  const upper = anchors[upperGrade].card;
+  const stability = Math.exp(
+    (1 - fraction) * Math.log(lower.stability) + fraction * Math.log(upper.stability),
+  );
+  const difficulty = card.state === State.New
+    ? Math.min(10, Math.max(1, fsrsScheduler.init_difficulty(continuousGrade as Grade)))
+    : fsrsScheduler.next_difficulty(card.difficulty, continuousGrade as Grade);
+  const rawInterval = fsrsScheduler.next_interval(stability, lower.elapsed_days);
+  const scheduledDays = Math.max(lower.scheduled_days, Math.min(upper.scheduled_days, rawInterval));
+
+  if ([stability, difficulty, scheduledDays].every(Number.isFinite) === false) {
+    throw new RangeError("Continuous FSRS interpolation produced a non-finite card.");
+  }
+  if (difficulty < 1 || difficulty > 10) {
+    throw new RangeError("Continuous FSRS interpolation produced an invalid difficulty.");
+  }
+
+  return {
+    ...lower,
+    due: date_scheduler(reviewedAt, scheduledDays, true),
+    stability,
+    difficulty,
+    scheduled_days: scheduledDays,
+    reps: card.reps + 1,
+    lapses: card.lapses + (card.state !== State.New && continuousGrade < LAPSE_GRADE_THRESHOLD ? 1 : 0),
+    state: State.Review,
+    learning_steps: 0,
+    last_review: reviewedAt,
+  };
+}
+
 export function scheduleReview(
   state: ReviewState,
   rating: ReviewRating,
   reviewedAt: Date,
   keepWarmDays: KeepWarmDays,
   timeZone = "Asia/Kolkata",
+  continuousGrade?: number | null,
 ): ReviewState {
   const today = dateKey(reviewedAt, timeZone);
 
@@ -123,31 +183,38 @@ export function scheduleReview(
   const card = state.fsrsCard
     ? hydrateCard(state.fsrsCard)
     : createEmptyCard(reviewedAt);
-  const result = fsrsScheduler.next(card, reviewedAt, ratingToFsrs(rating));
-  let dueOn = dateKey(result.card.due, timeZone);
+  const nextCard = scheduleFsrsCard(card, reviewedAt, rating, continuousGrade);
+  let dueOn = dateKey(nextCard.due, timeZone);
   if (dayDifference(today, dueOn) < 1) dueOn = addCalendarDays(today, 1);
-  result.card.due = new Date(zonedNoonTimestamp(dueOn, timeZone));
+  nextCard.due = new Date(zonedNoonTimestamp(dueOn, timeZone));
   return {
     ...state,
-    dueAt: result.card.due.toISOString(),
+    dueAt: nextCard.due.toISOString(),
     dueOn,
     lastReviewedAt: reviewedAt.toISOString(),
     reviewCount: state.reviewCount + 1,
-    fsrsCard: serializeCard(result.card),
+    fsrsCard: serializeCard(nextCard),
   };
 }
 
 export function replayScheduler(
   target: SchedulerKind,
   learnedAt: Date | string,
-  events: Pick<ReviewEvent, "reviewedAt" | "rating">[],
+  events: Array<Pick<ReviewEvent, "reviewedAt" | "rating"> & Partial<Pick<ReviewEvent, "id" | "continuousGrade">>>,
   keepWarmDays: KeepWarmDays,
   timeZone = "Asia/Kolkata",
 ): ReviewState {
   return [...events]
-    .sort((a, b) => a.reviewedAt.localeCompare(b.reviewedAt))
+    .sort((a, b) => Date.parse(a.reviewedAt) - Date.parse(b.reviewedAt) || (a.id ?? "").localeCompare(b.id ?? ""))
     .reduce(
-      (state, event) => scheduleReview(state, event.rating, new Date(event.reviewedAt), keepWarmDays, timeZone),
+      (state, event) => scheduleReview(
+        state,
+        event.rating,
+        new Date(event.reviewedAt),
+        keepWarmDays,
+        timeZone,
+        event.continuousGrade,
+      ),
       typeof learnedAt === "string" && /^\d{4}-\d{2}-\d{2}$/.test(learnedAt)
         ? createReviewStateFromDay(target, learnedAt, timeZone)
         : createReviewState(target, new Date(learnedAt), timeZone),
