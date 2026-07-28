@@ -152,7 +152,7 @@ export function NoteEditor({
             onChange={(recallQuestions) => change({ ...draft, recallQuestions })}
           />
           <div className="flex justify-end">
-            <button className="button-primary !min-h-9" data-liquid disabled={status === "saved" || status === "saving"} onClick={() => save()}>
+            <button className="button-primary !min-h-9" data-liquid disabled={status === "saving"} onClick={() => save()}>
               Save now
             </button>
           </div>

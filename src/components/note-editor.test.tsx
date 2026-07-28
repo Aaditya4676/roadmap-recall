@@ -5,6 +5,25 @@ import { NoteEditor } from "@/components/note-editor";
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); localStorage.clear(); });
 
 describe("NoteEditor autosave", () => {
+  it("allows an explicit save when the note is already saved", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ revision: 2 }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<NoteEditor topicId="topic" initialMarkdown="saved note" initialQuestions={[]} initialRevision={1} latestRecallAnswers={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    const saveButton = screen.getByRole("button", { name: "Save now" });
+
+    expect(saveButton).toBeEnabled();
+    fireEvent.click(saveButton);
+    await act(async () => { await Promise.resolve(); });
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
   it("serializes overlapping edits and advances the expected revision", async () => {
     vi.useFakeTimers();
     let finishFirst!: (value: { ok: boolean; status: number; json: () => Promise<unknown> }) => void;
