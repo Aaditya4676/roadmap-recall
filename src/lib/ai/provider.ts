@@ -41,10 +41,10 @@ async function generateGemini(context: GenerationContext, repair?: string): Prom
     model: env.GEMINI_MODEL,
     contents: promptFor(context, repair),
     config: {
+      // Gemini 3.6 deprecates sampling parameters.
       responseMimeType: "application/json",
       responseJsonSchema: z.toJSONSchema(aiNoteDocumentSchema),
       abortSignal: signal,
-      temperature: 0.25,
     },
   }));
   if (!response.text) throw Object.assign(new Error("Gemini returned no text."), { code: "empty_response" });

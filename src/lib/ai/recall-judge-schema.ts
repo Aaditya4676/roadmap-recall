@@ -12,14 +12,38 @@ export const recallJudgmentDocumentSchema = z.object({
 
 export type RecallJudgmentDocument = z.infer<typeof recallJudgmentDocumentSchema>;
 
-export const recallAssessmentSchema = recallJudgmentDocumentSchema.extend({
+const storedRecallAssessmentSchema = recallJudgmentDocumentSchema.extend({
   retainedPercent: z.number().int().min(0).max(100),
   recommendedRating: z.enum(["again", "hard", "good", "easy"]),
   provider: z.enum(["gemini", "zai"]),
   model: z.string().trim().min(1).max(120),
+  meanScore: z.number().finite().min(0).max(4).optional(),
+  continuousGrade: z.number().finite().min(1).max(4).optional(),
 });
 
-export type RecallAssessment = z.infer<typeof recallAssessmentSchema>;
+export const recallAssessmentSchema = storedRecallAssessmentSchema.transform((assessment) => {
+  const meanScore = meanRecallScore(assessment.results);
+  return {
+    ...assessment,
+    meanScore,
+    continuousGrade: continuousGradeFromMean(meanScore),
+    retainedPercent: Math.round((meanScore / 4) * 100),
+    recommendedRating: ratingFromRecallScore(meanScore),
+  };
+});
+
+export type RecallAssessment = z.output<typeof recallAssessmentSchema>;
+
+export const LAPSE_GRADE_THRESHOLD = 1.5;
+
+export function meanRecallScore(results: RecallJudgmentDocument["results"]): number {
+  return results.reduce((total, item) => total + item.score, 0) / results.length;
+}
+
+export function continuousGradeFromMean(mean: number): number {
+  if (Number.isFinite(mean) === false) throw new RangeError();
+  return Math.min(4, Math.max(1, mean));
+}
 
 export function ratingFromRecallScore(score: number): ReviewRating {
   if (score < 1.5) return "again";
@@ -33,11 +57,13 @@ export function completeRecallAssessment(
   provider: RecallAssessment["provider"],
   model: string,
 ): RecallAssessment {
-  const average = document.results.reduce((total, item) => total + item.score, 0) / document.results.length;
+  const meanScore = meanRecallScore(document.results);
   return {
     ...document,
-    retainedPercent: Math.round((average / 4) * 100),
-    recommendedRating: ratingFromRecallScore(average),
+    meanScore,
+    continuousGrade: continuousGradeFromMean(meanScore),
+    retainedPercent: Math.round((meanScore / 4) * 100),
+    recommendedRating: ratingFromRecallScore(meanScore),
     provider,
     model,
   };

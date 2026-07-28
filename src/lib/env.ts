@@ -11,7 +11,7 @@ const schema = z.object({
   APP_TIME_ZONE: z.string().default("Asia/Kolkata"),
   AI_ACTION_TOKEN: z.string().min(32).optional(),
   GEMINI_API_KEY: z.string().optional(),
-  GEMINI_MODEL: z.string().default("gemini-2.5-flash"),
+  GEMINI_MODEL: z.string().default("gemini-3.6-flash"),
   ZAI_API_KEY: z.string().optional(),
   ZAI_MODEL: z.string().default("glm-5.2"),
   ZAI_API_BASE: z.string().url().default("https://api.z.ai/api/paas/v4"),

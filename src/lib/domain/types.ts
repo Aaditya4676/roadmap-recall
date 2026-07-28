@@ -95,6 +95,7 @@ export interface ReviewEvent {
   reviewedAt: string;
   reviewedOn: string;
   rating: ReviewRating;
+  continuousGrade?: number | null;
   scheduler: SchedulerKind;
   previousDueOn: string;
   nextDueOn: string;

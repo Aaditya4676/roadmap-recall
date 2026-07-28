@@ -1,4 +1,5 @@
 import { ActivityView, type CompletedReviewItem } from "@/components/activity-view";
+import { configuredRecallProviders } from "@/lib/ai/configured-providers";
 import { recallAssessmentSchema } from "@/lib/ai/recall-judge-schema";
 import { activityCalendarRange, buildActivitySummary, type ActivityEvent } from "@/lib/activity";
 import { dateKey } from "@/lib/date";
@@ -21,7 +22,8 @@ interface CompletedReviewRow {
   rating: CompletedReviewItem["rating"];
   recall_answers: unknown;
   ai_assessment: unknown;
-  study_topics: { title: string; breadcrumb: string } | Array<{ title: string; breadcrumb: string }>;
+  continuous_grade: number | null;
+  study_topics: { title: string; breadcrumb: string; scheduler: "fsrs" | "fixed" } | Array<{ title: string; breadcrumb: string; scheduler: "fsrs" | "fixed" }>;
 }
 
 export default async function ActivityPage() {
@@ -41,7 +43,7 @@ export default async function ActivityPage() {
   const [activityResult, completedResult] = await Promise.all([
     db.rpc("get_learning_activity_events", { p_from: range.start, p_to: today }),
     db.from("review_events")
-      .select("id, topic_id, reviewed_on, rating, recall_answers, ai_assessment, study_topics(title, breadcrumb)")
+      .select("id, topic_id, reviewed_on, rating, recall_answers, ai_assessment, continuous_grade, study_topics(title, breadcrumb, scheduler)")
       .order("reviewed_at", { ascending: false })
       .limit(50),
   ]);
@@ -71,11 +73,14 @@ export default async function ActivityPage() {
       breadcrumb: topic.breadcrumb,
       reviewedOn: row.reviewed_on,
       rating: row.rating,
+      scheduler: topic.scheduler,
       answerCount: answers.length,
       hasAiJudgment: row.ai_assessment !== null,
+      hasContinuousGrade: row.continuous_grade !== null,
+      usesContinuousScheduling: row.continuous_grade !== null && topic.scheduler === "fsrs",
       assessment: parsedAssessment.success ? parsedAssessment.data : null,
     }];
   });
 
-  return <ActivityView summary={buildActivitySummary(events, range.start, range.end, today)} today={today} completedReviews={completedReviews} />;
+  return <ActivityView summary={buildActivitySummary(events, range.start, range.end, today)} today={today} completedReviews={completedReviews} configuredProviders={configuredRecallProviders()} />;
 }

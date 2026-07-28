@@ -32,6 +32,8 @@ Fair-grading rules:
 - Give the same score to semantically equivalent answers even when their wording differs from the ideal.
 - Treat a blank answer as 0. Do not infer retained knowledge that was not written.
 - If the ideal answer itself is ambiguous, grade conservatively and mention that ambiguity in feedback.
+- If the central proposition is correct but secondary examples or elaboration are missing, normally score 3 rather than 2.
+- Reserve score 2 for an important conceptual omission, not merely a missing illustrative detail.
 - Evaluate every item before writing the overall summary.
 
 Score each answer:
@@ -43,7 +45,7 @@ Score each answer:
 
 Return exactly one result per input item, in the same order, preserving each questionId.
 Feedback must name the most important retained idea or gap in one concise sentence.
-The summary must describe the overall retention evidence without claiming to measure effort or confidence.
+The summary must describe the overall answer evidence without claiming to measure effort or confidence. It must name the most important score-0 or score-1 misconception when one exists.
 Do not calculate an aggregate percentage or choose an FSRS rating; the application will derive both from the isolated scores.
 Return only JSON matching the supplied schema.
 
@@ -74,10 +76,10 @@ async function callGemini(items: RecallJudgmentInput[]): Promise<{ text: string;
     model: env.GEMINI_MODEL,
     contents: judgmentPrompt(items),
     config: {
+      // Gemini 3.6 deprecates sampling parameters; rubric anchors provide calibration.
       responseMimeType: "application/json",
       responseJsonSchema: z.toJSONSchema(recallJudgmentDocumentSchema),
       abortSignal: signal,
-      temperature: 0,
     },
   }));
   if (!response.text) throw Object.assign(new Error("Gemini returned no judgment."), { code: "empty_response" });

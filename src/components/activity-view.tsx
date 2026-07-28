@@ -15,8 +15,11 @@ export interface CompletedReviewItem {
   breadcrumb: string;
   reviewedOn: string;
   rating: ReviewRating;
+  scheduler: "fsrs" | "fixed";
   answerCount: number;
   hasAiJudgment: boolean;
+  hasContinuousGrade: boolean;
+  usesContinuousScheduling: boolean;
   assessment: RecallAssessment | null;
 }
 
@@ -155,7 +158,7 @@ function CalendarGrid({
   );
 }
 
-export function ActivityView({ summary, today, completedReviews = [] }: { summary: ActivitySummary; today: string; completedReviews?: CompletedReviewItem[] }) {
+export function ActivityView({ summary, today, completedReviews = [], configuredProviders = [] }: { summary: ActivitySummary; today: string; completedReviews?: CompletedReviewItem[]; configuredProviders?: Array<"gemini" | "zai"> }) {
   const weeks = activityWeeks(summary.days);
   const [selectedDay, setSelectedDay] = useState(today);
   const selected = summary.days.find((day) => day.day === selectedDay) ?? summary.today;
@@ -199,7 +202,7 @@ export function ActivityView({ summary, today, completedReviews = [] }: { summar
         <Metric value={summary.reviews30} label="reviews · last 30" />
       </dl>
 
-      <CompletedReviews initialReviews={completedReviews} />
+      <CompletedReviews initialReviews={completedReviews} configuredProviders={configuredProviders} />
 
       <details className="mt-6 border-b border-[var(--border)] py-1">
         <summary className="cursor-pointer py-3 font-semibold">How the calendar works</summary>
@@ -212,9 +215,11 @@ export function ActivityView({ summary, today, completedReviews = [] }: { summar
   );
 }
 
-function CompletedReviews({ initialReviews }: { initialReviews: CompletedReviewItem[] }) {
+function CompletedReviews({ initialReviews, configuredProviders }: { initialReviews: CompletedReviewItem[]; configuredProviders: Array<"gemini" | "zai"> }) {
   const [reviews, setReviews] = useState(initialReviews);
-  const [provider, setProvider] = useState<"zai" | "gemini">("zai");
+  const [provider, setProvider] = useState<"zai" | "gemini">(
+    configuredProviders.includes("gemini") ? "gemini" : configuredProviders[0] ?? "gemini",
+  );
   const [consent, setConsent] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -250,6 +255,8 @@ function CompletedReviews({ initialReviews }: { initialReviews: CompletedReviewI
         ...item,
         rating: data.appliedRating!,
         hasAiJudgment: true,
+        hasContinuousGrade: true,
+        usesContinuousScheduling: review.scheduler === "fsrs",
         assessment: data.assessment!,
       } : item));
     } catch (requestError) {
@@ -257,6 +264,40 @@ function CompletedReviews({ initialReviews }: { initialReviews: CompletedReviewI
         setError(requestError instanceof Error && requestError.message
           ? requestError.message
           : "The completed review could not be judged.");
+      }
+    } finally {
+      if (request.current === controller) request.current = null;
+      if (!controller.signal.aborted) setBusyId(null);
+    }
+  }
+
+  async function applyContinuous(review: CompletedReviewItem) {
+    if (busyId || !review.hasAiJudgment || review.usesContinuousScheduling) return;
+    setBusyId(review.id);
+    setError("");
+    const controller = new AbortController();
+    request.current = controller;
+    try {
+      const response = await fetch(`/api/app/review-events/${review.id}/apply-continuous`, {
+        method: "POST",
+        signal: controller.signal,
+      });
+      const data = await response.json() as { assessment?: RecallAssessment; error?: { message?: string } };
+      if (!response.ok || !data.assessment) {
+        setError(data.error?.message ?? "The continuous schedule could not be applied.");
+        return;
+      }
+      setReviews((current) => current.map((item) => item.id === review.id ? {
+        ...item,
+        usesContinuousScheduling: true,
+        hasContinuousGrade: true,
+        assessment: data.assessment!,
+      } : item));
+    } catch (requestError) {
+      if (!controller.signal.aborted) {
+        setError(requestError instanceof Error && requestError.message
+          ? requestError.message
+          : "The continuous schedule could not be applied.");
       }
     } finally {
       if (request.current === controller) request.current = null;
@@ -273,7 +314,7 @@ function CompletedReviews({ initialReviews }: { initialReviews: CompletedReviewI
             An unjudged structured attempt can be assessed once. All its answers use one API request, then the full topic history is replayed so the rating affects its current schedule.
           </p>
         </div>
-        <select
+        {configuredProviders.length > 0 && <select
           aria-label="Completed review AI provider"
           className="field max-w-40"
           disabled={busyId !== null}
@@ -283,14 +324,14 @@ function CompletedReviews({ initialReviews }: { initialReviews: CompletedReviewI
             setConsent(false);
           }}
         >
-          <option value="zai">Z.AI</option>
-          <option value="gemini">Gemini</option>
-        </select>
+          {configuredProviders.includes("gemini") && <option value="gemini">Gemini</option>}
+          {configuredProviders.includes("zai") && <option value="zai">Z.AI</option>}
+        </select>}
       </div>
-      <label className="mb-5 flex items-start gap-2 text-sm text-[var(--muted)]">
+      {configuredProviders.length > 0 && <label className="mb-5 flex items-start gap-2 text-sm text-[var(--muted)]">
         <input className="mt-1" type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} />
         Send a completed review&apos;s questions, ideal answers, and answers to {provider === "zai" ? "Z.AI" : "Gemini"} when I request a judgment.
-      </label>
+      </label>}
       <div className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
         {reviews.map((review) => (
           <article key={review.id} className="grid gap-3 py-4 sm:grid-cols-[1fr_auto] sm:items-center">
@@ -301,14 +342,21 @@ function CompletedReviews({ initialReviews }: { initialReviews: CompletedReviewI
               </p>
               {review.assessment && (
                 <div className="mt-2 border-l-2 border-[var(--accent)] pl-3 text-sm">
-                  <p className="font-semibold">{review.assessment.retainedPercent}% retained / {review.assessment.recommendedRating}</p>
+                  <p className="font-semibold">
+                    {review.assessment.retainedPercent}% answer quality / {review.scheduler === "fixed" ? "AI grade (fixed schedule)" : review.usesContinuousScheduling ? "FSRS grade" : review.hasContinuousGrade ? "stored AI grade" : "pending FSRS grade"} {review.assessment.continuousGrade.toFixed(2)}
+                  </p>
                   <p className="mt-0.5 text-[var(--muted)]">{review.assessment.summary}</p>
                 </div>
               )}
             </div>
-            {!review.hasAiJudgment && (
+            {!review.hasAiJudgment && configuredProviders.length > 0 && (
               <button type="button" className="button-secondary" disabled={busyId !== null || !consent} onClick={() => judge(review)}>
                 <Sparkles size={17} /> {busyId === review.id ? "Judging and replaying..." : "Judge and update schedule"}
+              </button>
+            )}
+            {review.scheduler === "fsrs" && review.hasAiJudgment && !review.hasContinuousGrade && review.assessment && (
+              <button type="button" className="button-secondary" disabled={busyId !== null} onClick={() => applyContinuous(review)}>
+                <Sparkles size={17} /> {busyId === review.id ? "Replaying..." : `Apply ${review.assessment.retainedPercent}% to schedule`}
               </button>
             )}
           </article>
