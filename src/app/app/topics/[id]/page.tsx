@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AiNotePanel } from "@/components/ai-note-panel";
 import { NoteEditor } from "@/components/note-editor";
+import { recallAssessmentSchema } from "@/lib/ai/recall-judge-schema";
 import { humanDate } from "@/lib/date";
 import { getTopic } from "@/lib/data";
 import { createServerSupabase } from "@/lib/supabase/server";
@@ -12,8 +13,24 @@ export const dynamic = "force-dynamic";
 export default async function TopicPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const db = await createServerSupabase();
-  const topic = await getTopic(db, id);
+  const [topic, { data: latestReview, error: latestReviewError }] = await Promise.all([
+    getTopic(db, id),
+    db
+      .from("review_events")
+      .select("reviewed_at, ai_assessment")
+      .eq("topic_id", id)
+      .order("reviewed_at", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+  if (latestReviewError) throw latestReviewError;
   if (!topic) notFound();
+  const assessment = recallAssessmentSchema.safeParse(latestReview?.ai_assessment);
+  const isLatestAttempt = latestReview
+    && topic.reviewState.lastReviewedAt
+    && new Date(latestReview.reviewed_at).getTime() === new Date(topic.reviewState.lastReviewedAt).getTime();
+  const latestRecallGrades = assessment.success && isLatestAttempt ? assessment.data.results : [];
   const isPersonal = topic.breadcrumb === "Personal topics";
   return (
     <div className="mx-auto max-w-4xl">
@@ -39,6 +56,7 @@ export default async function TopicPage({ params }: { params: Promise<{ id: stri
         initialQuestions={topic.note.recallQuestions}
         initialRevision={topic.note.revision}
         latestRecallAnswers={topic.reviewState.latestRecallAnswers}
+        latestRecallGrades={latestRecallGrades}
       />
       <AiNotePanel topicId={topic.id} note={topic.aiNote} personalRevision={topic.note.revision} />
     </div>

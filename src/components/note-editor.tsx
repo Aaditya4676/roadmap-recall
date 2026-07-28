@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Markdown } from "@/components/markdown";
 import { RecallQuestionFields } from "@/components/recall-question-fields";
 import { RecallQuestionReference } from "@/components/recall-question-reference";
-import type { RecallAnswerSnapshot, RecallQuestion } from "@/lib/domain/types";
+import type { RecallAnswerGrade, RecallAnswerSnapshot, RecallQuestion } from "@/lib/domain/types";
 import { readRecallQuestions } from "@/lib/recall";
 
 type NoteStatus = "saved" | "dirty" | "saving" | "offline" | "conflict";
@@ -34,12 +34,14 @@ export function NoteEditor({
   initialQuestions,
   initialRevision,
   latestRecallAnswers,
+  latestRecallGrades = [],
 }: {
   topicId: string;
   initialMarkdown: string;
   initialQuestions: RecallQuestion[];
   initialRevision: number;
   latestRecallAnswers: RecallAnswerSnapshot[];
+  latestRecallGrades?: RecallAnswerGrade[];
 }) {
   const initialDraft = useMemo<NoteDraft>(
     () => ({ markdown: initialMarkdown, recallQuestions: initialQuestions }),
@@ -162,7 +164,11 @@ export function NoteEditor({
           <div className="reading-plane p-5 sm:p-6">
             <Markdown>{draft.markdown || "_No personal notes yet. Choose Edit to add your explanation._"}</Markdown>
           </div>
-          <RecallQuestionReference questions={draft.recallQuestions} latestAnswers={latestRecallAnswers} />
+          <RecallQuestionReference
+            questions={draft.recallQuestions}
+            latestAnswers={latestRecallAnswers}
+            latestGrades={latestRecallGrades}
+          />
         </>
       )}
     </section>

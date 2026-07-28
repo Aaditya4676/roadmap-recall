@@ -66,6 +66,12 @@ export interface RecallAnswerSnapshot extends RecallQuestion {
   answer: string;
 }
 
+export interface RecallAnswerGrade {
+  questionId: string;
+  score: number;
+  feedback: string;
+}
+
 export interface PersonalNote {
   markdown: string;
   recallQuestions: RecallQuestion[];
