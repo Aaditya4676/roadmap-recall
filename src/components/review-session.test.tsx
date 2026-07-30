@@ -128,6 +128,20 @@ describe("ReviewSession structured recall", () => {
     expect(screen.getByRole("link", { name: /End session/ })).toHaveAttribute("aria-disabled", "true");
   });
 
+  it("shows bounded progress while AI grading is in flight", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => undefined)));
+
+    render(<ReviewSession initialTopics={[topic()]} configuredProviders={["gemini"]} />);
+    await user.click(screen.getByRole("button", { name: "Check my answers" }));
+    await user.click(screen.getByRole("checkbox", { name: /Send these questions, ideal answers/i }));
+    await user.click(screen.getByRole("button", { name: "Grade with Gemini" }));
+
+    expect(screen.getByRole("button", { name: "Grading 1 answer with Gemini..." })).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent("Grading stops automatically");
+    expect(screen.getByRole("button", { name: "good" })).toBeDisabled();
+  });
+
   it("uses a validated AI recommendation while keeping manual ratings available", async () => {
     const user = userEvent.setup();
     const currentTopic = topic();

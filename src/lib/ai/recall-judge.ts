@@ -11,6 +11,9 @@ import {
 } from "@/lib/ai/recall-judge-schema";
 import { env } from "@/lib/env";
 
+const AI_JUDGE_TIMEOUT_MS = 75_000;
+const GEMINI_HTTP_TIMEOUT_MS = 70_000;
+
 interface RecallJudgmentInput {
   questionId: string;
   question: string;
@@ -55,7 +58,7 @@ INPUT:
 ${JSON.stringify(items)}`;
 }
 
-async function withTimeout<T>(operation: (signal: AbortSignal) => Promise<T>, milliseconds = 75_000): Promise<T> {
+async function withTimeout<T>(operation: (signal: AbortSignal) => Promise<T>, milliseconds = AI_JUDGE_TIMEOUT_MS): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), milliseconds);
   try { return await operation(controller.signal); }
@@ -78,6 +81,12 @@ async function callGemini(items: RecallJudgmentInput[]): Promise<{ text: string;
     model: env.GEMINI_MODEL,
     contents: judgmentPrompt(items),
     config: {
+      // Bound one provider attempt. The SDK otherwise retries up to five times,
+      // which can turn a transient provider failure into a multi-minute wait.
+      httpOptions: {
+        timeout: GEMINI_HTTP_TIMEOUT_MS,
+        retryOptions: { attempts: 1 },
+      },
       // Gemini 3.6 deprecates sampling parameters; rubric anchors provide calibration.
       responseMimeType: "application/json",
       responseJsonSchema: z.toJSONSchema(recallJudgmentDocumentSchema),
@@ -125,10 +134,16 @@ export async function judgeRecall(provider: ProviderName, items: RecallJudgmentI
     try {
       return await call(items);
     } catch (error) {
-      if ((error as { code?: string })?.code) throw error;
-      if (error instanceof Error && error.name === "AbortError") {
+      const providerError = error as { code?: number | string; status?: number; message?: string };
+      if ((error instanceof Error && error.name === "AbortError")
+        || providerError.code === 408
+        || providerError.code === 504
+        || providerError.status === 408
+        || providerError.status === 504
+        || /time(?:d)?\s*out/i.test(providerError.message ?? "")) {
         throw Object.assign(new Error("The AI judge timed out."), { code: "provider_timeout" });
       }
+      if (typeof providerError.code === "string") throw error;
       throw Object.assign(new Error("The AI provider request failed."), { code: "provider_error", cause: error });
     }
   }

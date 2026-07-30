@@ -16,6 +16,8 @@ import {
 } from "@/lib/recall";
 
 const MAX_SCRATCHPAD_CHARS = 20_000;
+const AI_JUDGE_CLIENT_TIMEOUT_MS = 90_000;
+const REVIEW_SAVE_CLIENT_TIMEOUT_MS = 45_000;
 const REVIEW_DRAFT_VERSION = 1;
 
 type ReviewDraft = {
@@ -330,6 +332,11 @@ export function ReviewSession({
     setAssessment(null);
     persistDraft({ assessment: null });
     const controller = new AbortController();
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, AI_JUDGE_CLIENT_TIMEOUT_MS);
     judgeRequest.current = controller;
     try {
       const response = await fetch(`/api/app/topics/${topic.id}/review/judge`, {
@@ -351,14 +358,17 @@ export function ReviewSession({
       setAssessment(data.assessment);
       persistDraft({ assessment: data.assessment, revealed: true });
     } catch (requestError) {
-      if (!controller.signal.aborted) {
+      if (timedOut) {
+        setJudgeError("AI grading exceeded 90 seconds and was stopped. Your answers remain autosaved.");
+      } else if (!controller.signal.aborted) {
         setJudgeError(requestError instanceof Error && requestError.message
           ? requestError.message
           : "The AI judge could not assess these answers. You can still rate manually.");
       }
     } finally {
+      clearTimeout(timeout);
       if (judgeRequest.current === controller) judgeRequest.current = null;
-      if (!controller.signal.aborted) setJudging(false);
+      if (!controller.signal.aborted || timedOut) setJudging(false);
     }
   }
 
@@ -370,6 +380,11 @@ export function ReviewSession({
     setError("");
     setConflict(false);
     const controller = new AbortController();
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, REVIEW_SAVE_CLIENT_TIMEOUT_MS);
     request.current = controller;
     try {
       const response = await fetch(`/api/app/topics/${topic.id}/review`, {
@@ -409,15 +424,18 @@ export function ReviewSession({
       setJudgeConsent(false);
       setAnswerError("");
     } catch (requestError) {
-      if (!controller.signal.aborted) {
+      if (timedOut) {
+        setError("Saving exceeded 45 seconds, so confirmation was stopped. Your draft remains autosaved. Check Activity before retrying in case the server completed it.");
+      } else if (!controller.signal.aborted) {
         setError(requestError instanceof Error && requestError.message
           ? requestError.message
           : "The review could not be saved. Check your connection and try again.");
       }
     } finally {
+      clearTimeout(timeout);
       if (request.current === controller) request.current = null;
       inFlight.current = false;
-      if (!controller.signal.aborted) setSaving(false);
+      if (!controller.signal.aborted || timedOut) setSaving(false);
     }
   }
 
@@ -553,14 +571,21 @@ export function ReviewSession({
                     {configuredProviders.includes("zai") && <option value="zai">Z.AI</option>}
                   </select>
                   <button type="button" className="button-primary" disabled={judging || saving || !judgeConsent} onClick={judgeAnswers}>
-                    <Sparkles size={17} /> {judging ? "Grading..." : assessment ? "Grade again" : `Grade with ${judgeProvider === "gemini" ? "Gemini" : "Z.AI"}`}
+                    {judging
+                      ? <><LoaderCircle className="animate-spin" size={17} /> Grading {recallQuestions.length} {recallQuestions.length === 1 ? "answer" : "answers"} with {judgeProvider === "gemini" ? "Gemini" : "Z.AI"}...</>
+                      : <><Sparkles size={17} /> {assessment ? "Grade again" : `Grade with ${judgeProvider === "gemini" ? "Gemini" : "Z.AI"}`}</>}
                   </button>
                 </div>
+                {judging && (
+                  <p role="status" aria-live="assertive" className="mt-3 text-sm font-semibold">
+                    Your answers are autosaved. Grading stops automatically if the provider does not respond within 90 seconds.
+                  </p>
+                )}
                 <label className="mt-3 flex items-start gap-2 text-sm text-[var(--muted)]">
                   <input className="mt-1" type="checkbox" checked={judgeConsent} onChange={(event) => setJudgeConsent(event.target.checked)} />
                   Send these questions, ideal answers, and my attempt to {judgeProvider === "zai" ? "Z.AI" : "Gemini"}; use its score to schedule this review.
                 </label>
-                {judgeError && <p role="alert" className="mt-3 text-sm text-[var(--danger)]">{judgeError} Manual rating is still available below.</p>}
+                {judgeError && <p role="alert" className="mt-3 text-sm text-[var(--danger)]">{judgeError} Your answers remain autosaved; manual rating is available below, or retry AI grading.</p>}
                 {assessment && (
                   <div className="mt-4 border-l-2 border-[var(--accent)] pl-4" aria-live="polite">
                     <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -598,7 +623,7 @@ export function ReviewSession({
             </div>
             {saving && (
               <p role="status" aria-live="assertive" className="mt-4 text-center text-sm font-semibold">
-                Saving your review and scheduling the next one. Stay on this page.
+                Saving your review and scheduling the next one. This usually takes a few seconds and stops after 45 seconds if confirmation does not arrive.
               </p>
             )}
             {error && <p role="alert" className="mt-4 text-center text-sm text-[var(--danger)]">{error}</p>}
