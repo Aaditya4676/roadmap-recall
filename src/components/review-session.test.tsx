@@ -12,6 +12,7 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  localStorage.clear();
 });
 
 const question = {
@@ -51,6 +52,25 @@ function topic(): StudyTopic {
 }
 
 describe("ReviewSession structured recall", () => {
+  it("autosaves and restores an unfinished structured response", async () => {
+    const user = userEvent.setup();
+    const currentTopic = topic();
+    const { unmount } = render(<ReviewSession initialTopics={[currentTopic]} />);
+
+    await user.type(
+      screen.getByRole("textbox", { name: /What does aria-invalid do/i }),
+      "It communicates invalid state.",
+    );
+    expect(localStorage.getItem(`roadmap-recall-review-draft-${currentTopic.id}`))
+      .toContain("It communicates invalid state.");
+
+    unmount();
+    render(<ReviewSession initialTopics={[currentTopic]} />);
+
+    expect(await screen.findByDisplayValue("It communicates invalid state.")).toBeVisible();
+    expect(screen.getByText("Recovered your autosaved response from this device.")).toBeVisible();
+  });
+
   it("keeps references hidden, then submits a versioned answer snapshot", async () => {
     const user = userEvent.setup();
     const nextState = { ...topic().reviewState, reviewCount: 2 };
@@ -87,6 +107,8 @@ describe("ReviewSession structured recall", () => {
         answer: "It only communicates invalid state.",
       }],
     });
+    expect(await screen.findByRole("heading", { name: "Review complete" })).toBeVisible();
+    expect(localStorage.getItem(`roadmap-recall-review-draft-${topic().id}`)).toBeNull();
   });
 
   it("guards duplicate ratings while a save is in flight", async () => {
@@ -102,6 +124,8 @@ describe("ReviewSession structured recall", () => {
 
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(rating).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent("Saving your review");
+    expect(screen.getByRole("link", { name: /End session/ })).toHaveAttribute("aria-disabled", "true");
   });
 
   it("uses a validated AI recommendation while keeping manual ratings available", async () => {

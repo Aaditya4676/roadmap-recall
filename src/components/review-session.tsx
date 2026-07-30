@@ -1,12 +1,12 @@
 "use client";
 
-import { CheckCircle2, Sparkles } from "lucide-react";
+import { CheckCircle2, LoaderCircle, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { FocusTextarea } from "@/components/focus-textarea";
 import { Markdown } from "@/components/markdown";
-import type { RecallAssessment } from "@/lib/ai/recall-judge-schema";
+import { recallAssessmentSchema, type RecallAssessment } from "@/lib/ai/recall-judge-schema";
 import type { RecallQuestion, ReviewRating, ReviewState, StudyTopic } from "@/lib/domain/types";
 import {
   MAX_RECALL_ANSWER_CHARS,
@@ -16,6 +16,79 @@ import {
 } from "@/lib/recall";
 
 const MAX_SCRATCHPAD_CHARS = 20_000;
+const REVIEW_DRAFT_VERSION = 1;
+
+type ReviewDraft = {
+  version: typeof REVIEW_DRAFT_VERSION;
+  topicId: string;
+  noteRevision: number;
+  reviewCount: number;
+  scratchpad: string;
+  answers: Record<string, string>;
+  append: boolean;
+  revealed: boolean;
+  assessment: RecallAssessment | null;
+  savedAt: string;
+};
+
+type ReviewDraftContent = Pick<ReviewDraft, "scratchpad" | "answers" | "append" | "revealed" | "assessment">;
+
+function reviewDraftKey(topicId: string) {
+  return `roadmap-recall-review-draft-${topicId}`;
+}
+
+function removeReviewDraft(topicId: string) {
+  try {
+    localStorage.removeItem(reviewDraftKey(topicId));
+  } catch {
+    // A completed server submission must not fail because browser storage is unavailable.
+  }
+}
+
+function readReviewDraft(value: string | null, topic: StudyTopic): ReviewDraft | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value) as Partial<ReviewDraft>;
+    if (parsed.version !== REVIEW_DRAFT_VERSION
+      || parsed.topicId !== topic.id
+      || parsed.noteRevision !== topic.note.revision
+      || parsed.reviewCount !== topic.reviewState.reviewCount
+      || typeof parsed.scratchpad !== "string"
+      || parsed.scratchpad.length > MAX_SCRATCHPAD_CHARS
+      || !parsed.answers
+      || typeof parsed.answers !== "object"
+      || typeof parsed.append !== "boolean"
+      || typeof parsed.revealed !== "boolean"
+      || typeof parsed.savedAt !== "string") return null;
+
+    const questionIds = new Set(readyRecallQuestions(topic.note.recallQuestions).map((item) => item.id));
+    const answers = Object.fromEntries(
+      Object.entries(parsed.answers).filter(([id, answer]) => (
+        questionIds.has(id)
+        && typeof answer === "string"
+        && answer.length <= MAX_RECALL_ANSWER_CHARS
+      )),
+    );
+    if (Object.values(answers).reduce((total, answer) => total + answer.length, 0) > MAX_RECALL_TOTAL_CHARS) return null;
+    const assessment = parsed.assessment
+      ? recallAssessmentSchema.safeParse(parsed.assessment)
+      : null;
+    return {
+      version: REVIEW_DRAFT_VERSION,
+      topicId: topic.id,
+      noteRevision: topic.note.revision,
+      reviewCount: topic.reviewState.reviewCount,
+      scratchpad: parsed.scratchpad,
+      answers,
+      append: parsed.append,
+      revealed: parsed.revealed,
+      assessment: assessment?.success ? assessment.data : null,
+      savedAt: parsed.savedAt,
+    };
+  } catch {
+    return null;
+  }
+}
 
 type ReviewResponse = {
   reviewState?: ReviewState;
@@ -129,6 +202,8 @@ export function ReviewSession({
   const [error, setError] = useState("");
   const [answerError, setAnswerError] = useState("");
   const [conflict, setConflict] = useState(false);
+  const [draftRestored, setDraftRestored] = useState(false);
+  const [draftStorageError, setDraftStorageError] = useState(false);
   const inFlight = useRef(false);
   const request = useRef<AbortController | null>(null);
   const judgeRequest = useRef<AbortController | null>(null);
@@ -137,10 +212,60 @@ export function ReviewSession({
   const usesQuestions = recallQuestions.length > 0;
   const returnHref = mode === "single" && topics[0] ? `/app/topics/${topics[0].id}` : "/app/today";
 
+  useEffect(() => {
+    if (!topic) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      try {
+        const key = reviewDraftKey(topic.id);
+        const stored = localStorage.getItem(key);
+        const draft = readReviewDraft(stored, topic);
+        if (!draft) {
+          if (stored) removeReviewDraft(topic.id);
+          setDraftRestored(false);
+          setDraftStorageError(false);
+          return;
+        }
+        setScratchpad(draft.scratchpad);
+        setAnswers(draft.answers);
+        setAppend(draft.append);
+        setRevealed(draft.revealed);
+        setAssessment(draft.assessment);
+        setDraftRestored(true);
+        setDraftStorageError(false);
+      } catch {
+        setDraftStorageError(true);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [topic]);
+
   useEffect(() => () => {
-    request.current?.abort();
     judgeRequest.current?.abort();
   }, []);
+
+  useEffect(() => {
+    if (!saving) return;
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    const blockLinkNavigation = (event: MouseEvent) => {
+      if (event.target instanceof Element && event.target.closest("a[href]")) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    document.addEventListener("click", blockLinkNavigation, true);
+    return () => {
+      window.removeEventListener("beforeunload", warnBeforeUnload);
+      document.removeEventListener("click", blockLinkNavigation, true);
+    };
+  }, [saving]);
 
   if (!topic) {
     return (
@@ -159,6 +284,28 @@ export function ReviewSession({
     );
   }
 
+  function persistDraft(overrides: Partial<ReviewDraftContent> = {}) {
+    const nextAssessment = "assessment" in overrides ? overrides.assessment ?? null : assessment;
+    const draft: ReviewDraft = {
+      version: REVIEW_DRAFT_VERSION,
+      topicId: topic.id,
+      noteRevision: topic.note.revision,
+      reviewCount: topic.reviewState.reviewCount,
+      scratchpad: overrides.scratchpad ?? scratchpad,
+      answers: overrides.answers ?? answers,
+      append: overrides.append ?? append,
+      revealed: overrides.revealed ?? revealed,
+      assessment: nextAssessment,
+      savedAt: new Date().toISOString(),
+    };
+    try {
+      localStorage.setItem(reviewDraftKey(topic.id), JSON.stringify(draft));
+      setDraftStorageError(false);
+    } catch {
+      setDraftStorageError(true);
+    }
+  }
+
   function updateAnswer(id: string, answer: string) {
     const total = Object.entries(answers).reduce(
       (sum, [questionId, value]) => sum + (questionId === id ? 0 : value.length),
@@ -171,7 +318,9 @@ export function ReviewSession({
     setAnswerError("");
     setAssessment(null);
     setJudgeError("");
-    setAnswers((current) => ({ ...current, [id]: answer }));
+    const nextAnswers = { ...answers, [id]: answer };
+    setAnswers(nextAnswers);
+    persistDraft({ answers: nextAnswers, assessment: null });
   }
 
   async function judgeAnswers() {
@@ -179,6 +328,7 @@ export function ReviewSession({
     setJudging(true);
     setJudgeError("");
     setAssessment(null);
+    persistDraft({ assessment: null });
     const controller = new AbortController();
     judgeRequest.current = controller;
     try {
@@ -199,6 +349,7 @@ export function ReviewSession({
         return;
       }
       setAssessment(data.assessment);
+      persistDraft({ assessment: data.assessment, revealed: true });
     } catch (requestError) {
       if (!controller.signal.aborted) {
         setJudgeError(requestError instanceof Error && requestError.message
@@ -215,6 +366,7 @@ export function ReviewSession({
     if (inFlight.current) return;
     inFlight.current = true;
     setSaving(true);
+    persistDraft();
     setError("");
     setConflict(false);
     const controller = new AbortController();
@@ -245,6 +397,7 @@ export function ReviewSession({
         latestRecallAnswers: readRecallAnswerSnapshots(data.reviewState.latestRecallAnswers),
       };
       setTopics((current) => current.map((item) => item.id === topic.id ? { ...item, reviewState } : item));
+      removeReviewDraft(topic.id);
       setIndex((value) => value + 1);
       setScratchpad("");
       setAnswers({});
@@ -271,7 +424,14 @@ export function ReviewSession({
   return (
     <div className="mx-auto max-w-3xl">
       <div className="mb-5 flex items-center justify-between">
-        <Link href={returnHref} className="button-ghost">
+        <Link
+          href={returnHref}
+          className={`button-ghost ${saving ? "pointer-events-none opacity-50" : ""}`}
+          aria-disabled={saving}
+          onClick={(event) => {
+            if (inFlight.current) event.preventDefault();
+          }}
+        >
           {mode === "single" ? "← Back to topic" : "← End session"}
         </Link>
         <span className="text-sm text-[var(--muted)]">{index + 1} / {topics.length}</span>
@@ -283,6 +443,13 @@ export function ReviewSession({
         <p className="context-label">Recall before reveal</p>
         <h1 className="mt-2 text-balance text-3xl font-bold sm:text-4xl">{topic.title}</h1>
         <p className="mt-1 text-sm text-[var(--muted)]">{topic.breadcrumb}</p>
+        <p className={`mt-3 text-xs ${draftStorageError ? "text-[var(--danger)]" : "text-[var(--muted)]"}`} aria-live="polite">
+          {draftStorageError
+            ? "Autosave is unavailable in this browser. Keep this page open until you submit."
+            : draftRestored
+              ? "Recovered your autosaved response from this device."
+              : "Your in-progress response is autosaved on this device."}
+        </p>
 
         {usesQuestions ? (
           <QuestionRecall
@@ -302,12 +469,23 @@ export function ReviewSession({
                 className="min-h-64 sm:min-h-72"
                 maxLength={MAX_SCRATCHPAD_CHARS}
                 value={scratchpad}
-                onChange={setScratchpad}
+                onChange={(value) => {
+                  setScratchpad(value);
+                  persistDraft({ scratchpad: value });
+                }}
                 placeholder="Use this space to reconstruct the idea…"
               />
             </div>
             <label className="mt-3 flex items-start gap-2 text-sm text-[var(--muted)]">
-              <input className="mt-1" type="checkbox" checked={append} onChange={(event) => setAppend(event.target.checked)} />
+              <input
+                className="mt-1"
+                type="checkbox"
+                checked={append}
+                onChange={(event) => {
+                  setAppend(event.target.checked);
+                  persistDraft({ append: event.target.checked });
+                }}
+              />
               Append this scratchpad to my personal note after rating
             </label>
           </>
@@ -315,7 +493,14 @@ export function ReviewSession({
         {answerError && <p role="alert" className="mt-3 text-sm text-[var(--danger)]">{answerError}</p>}
 
         {!revealed ? (
-          <button className="button-primary mt-6 w-full" data-liquid onClick={() => setRevealed(true)}>
+          <button
+            className="button-primary mt-6 w-full"
+            data-liquid
+            onClick={() => {
+              setRevealed(true);
+              persistDraft({ revealed: true });
+            }}
+          >
             {usesQuestions ? "Check my answers" : "Reveal my notes"}
           </button>
         ) : (
@@ -397,7 +582,9 @@ export function ReviewSession({
                         assessment,
                       )}
                     >
-                      Schedule from {assessment.retainedPercent}% AI score
+                      {saving
+                        ? <><LoaderCircle className="animate-spin" size={17} /> Saving review and scheduling...</>
+                        : `Schedule from ${assessment.retainedPercent}% AI score`}
                     </button>
                   </div>
                 )}
@@ -409,6 +596,11 @@ export function ReviewSession({
                 <button disabled={saving || judging} key={rating} data-liquid className={rating === "good" ? "button-primary capitalize" : "button-secondary capitalize"} onClick={() => rate(rating)}>{rating}</button>
               ))}
             </div>
+            {saving && (
+              <p role="status" aria-live="assertive" className="mt-4 text-center text-sm font-semibold">
+                Saving your review and scheduling the next one. Stay on this page.
+              </p>
+            )}
             {error && <p role="alert" className="mt-4 text-center text-sm text-[var(--danger)]">{error}</p>}
             {conflict && (
               <button type="button" className="button-secondary mx-auto mt-3" onClick={() => window.location.reload()}>
