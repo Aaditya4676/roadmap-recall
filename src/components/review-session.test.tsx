@@ -141,13 +141,14 @@ describe("ReviewSession structured recall", () => {
           json: async () => ({
             assessment: {
               retainedPercent: 75,
-              meanScore: 3,
+              meanScore: 7.5,
+              scoreScale: 10,
               continuousGrade: 3,
               recommendedRating: "good",
               provider: "gemini",
               model: "gemini-3.6-flash",
               summary: "The core behavior was retained.",
-              results: [{ questionId: question.id, score: 3, feedback: "The answer kept the essential distinction." }],
+              results: [{ questionId: question.id, score: 7.5, feedback: "The answer kept the essential distinction." }],
             },
           }),
         };

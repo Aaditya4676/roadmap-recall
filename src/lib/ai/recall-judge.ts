@@ -32,20 +32,22 @@ Fair-grading rules:
 - Give the same score to semantically equivalent answers even when their wording differs from the ideal.
 - Treat a blank answer as 0. Do not infer retained knowledge that was not written.
 - If the ideal answer itself is ambiguous, grade conservatively and mention that ambiguity in feedback.
-- If the central proposition is correct but secondary examples or elaboration are missing, normally score 3 rather than 2.
-- Reserve score 2 for an important conceptual omission, not merely a missing illustrative detail.
+- If the central proposition is correct but secondary examples or elaboration are missing, normally score around 7.5 rather than 5.
+- Reserve scores around 5 for an important conceptual omission, not merely a missing illustrative detail.
 - Evaluate every item before writing the overall summary.
 
-Score each answer:
-0 = blank, irrelevant, or wrong
-1 = a little relevant knowledge, but major errors or gaps
-2 = partially correct, with important omissions
-3 = substantially correct, with only minor omissions or imprecision
-4 = fully correct relative to the ideal answer
+Score each answer from 0 to 10. Every score must use a 0.5 increment (0, 0.5, 1, 1.5, and so on):
+0 = blank, irrelevant, or entirely wrong
+0.5-2 = a little relevant knowledge, but major errors or gaps
+2.5-4.5 = some correct knowledge, but the central idea is missing or substantially wrong
+5-6 = partially correct, with important omissions
+6.5-8 = substantially correct, with only minor omissions or imprecision
+8.5-9.5 = correct and complete in substance, with at most a negligible issue
+10 = fully correct relative to the ideal answer
 
 Return exactly one result per input item, in the same order, preserving each questionId.
 Feedback must name the most important retained idea or gap in one concise sentence.
-The summary must describe the overall answer evidence without claiming to measure effort or confidence. It must name the most important score-0 or score-1 misconception when one exists.
+The summary must describe the overall answer evidence without claiming to measure effort or confidence. It must name the most important score-at-or-below-2.5 misconception when one exists.
 Do not calculate an aggregate percentage or choose an FSRS rating; the application will derive both from the isolated scores.
 Return only JSON matching the supplied schema.
 

@@ -570,7 +570,7 @@ export function ReviewSession({
                     <p className="mt-1 text-sm text-[var(--muted)]">{assessment.summary}</p>
                     <ol className="mt-3 grid gap-2 text-sm">
                       {assessment.results.map((result, resultIndex) => (
-                        <li key={result.questionId}><strong>{resultIndex + 1}. {result.score}/4</strong> - {result.feedback}</li>
+                        <li key={result.questionId}><strong>{resultIndex + 1}. {result.score}/10</strong> - {result.feedback}</li>
                       ))}
                     </ol>
                     <button

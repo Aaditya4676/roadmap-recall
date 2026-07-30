@@ -43,7 +43,7 @@ export function RecallQuestionReference({
                     <p className="whitespace-pre-wrap">{latest.answer || "No answer was entered."}</p>
                     {grade && (
                       <div className="mt-3 border-t border-[var(--border)] pt-3">
-                        <p className="font-semibold">AI grade: {grade.score}/4</p>
+                        <p className="font-semibold">AI grade: {grade.score}/10</p>
                         <p className="mt-1 text-[var(--muted)]">{grade.feedback}</p>
                       </div>
                     )}

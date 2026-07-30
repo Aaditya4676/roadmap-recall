@@ -18,13 +18,13 @@ describe("RecallQuestionReference", () => {
         }]}
         latestGrades={[{
           questionId: id,
-          score: 4,
+          score: 10,
           feedback: "Correctly explains that the attribute communicates invalid state.",
         }]}
       />,
     );
 
-    expect(screen.getByText("AI grade: 4/4")).toBeInTheDocument();
+    expect(screen.getByText("AI grade: 10/10")).toBeInTheDocument();
     expect(screen.getByText("Correctly explains that the attribute communicates invalid state.")).toBeInTheDocument();
   });
 
